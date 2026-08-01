@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      No remote origins at all. Every font is bundled locally, there is no CDN, and the
+      app has no HTTP layer — so the corpus can contain arbitrary fetched text without
+      that text being able to phone anywhere. The localhost allowances are for the Vite
+      dev server; in production the renderer is served from `desvu://app`, so `'self'`
+      is a real origin and this policy is genuinely restrictive.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               font-src 'self';
+               img-src 'self' data: blob:;
+               media-src 'self' data: blob:;
+               connect-src 'self' ws://localhost:* http://localhost:*;
+               object-src 'none';
+               base-uri 'none';
+               form-action 'none';
+               frame-src 'none'"
+    />
+    <title>Dès vu</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

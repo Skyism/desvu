@@ -1,7 +1,11 @@
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { calendarRepository } from '../src/main/repos/calendarRepository'
-import { formatInboxLine, inboxRepository } from '../src/main/repos/inboxRepository'
+import {
+  formatInboxLine,
+  inboxDayHeading,
+  inboxRepository,
+} from '../src/main/repos/inboxRepository'
 import { obsidianUrl, setExternalOpener, systemRepository } from '../src/main/repos/systemRepository'
 import { createTempVault, dayOffset, type TempVault } from './helpers/vault'
 
@@ -40,8 +44,38 @@ describe('inbox line format — shared byte-for-byte with the Telegram bot', () 
 
     const raw = await readFile(vault.at('Inbox', `${today()}.md`), 'utf8')
     expect(raw.split('\n').filter(Boolean)).toEqual([
+      `# ${today()}`,
       '- [ ] 08:00 · telegram · first capture',
       '- [ ] 09:30 · app · second capture',
+    ])
+  })
+
+  it('opens a new day file with the same heading the bot writes', async () => {
+    // Whichever writer captures first that day decides the file's shape, so the two
+    // must agree. A heading that appeared only on days the bot happened to see first
+    // would be a confusing artifact in Obsidian.
+    await inboxRepository.append('first of the day', 'app', new Date(2026, 7, 1, 7, 15))
+    const raw = await readFile(vault.at('Inbox', `${today()}.md`), 'utf8')
+
+    expect(raw).toBe(`# ${today()}\n\n- [ ] 07:15 · app · first of the day\n`)
+    expect(raw.startsWith(inboxDayHeading(today()))).toBe(true)
+  })
+
+  it('does not add a second heading to a file the bot already created', async () => {
+    await mkdir(vault.at('Inbox'), { recursive: true })
+    await writeFile(
+      vault.at('Inbox', `${today()}.md`),
+      `# ${today()}\n\n- [ ] 06:00 · telegram · sent from the phone\n`,
+      'utf8'
+    )
+    await inboxRepository.append('added by the app', 'app', new Date(2026, 7, 1, 10, 0))
+
+    const raw = await readFile(vault.at('Inbox', `${today()}.md`), 'utf8')
+    expect(raw.match(/^# /gm)).toHaveLength(1)
+    expect(raw.split('\n').filter(Boolean)).toEqual([
+      `# ${today()}`,
+      '- [ ] 06:00 · telegram · sent from the phone',
+      '- [ ] 10:00 · app · added by the app',
     ])
   })
 
@@ -49,7 +83,7 @@ describe('inbox line format — shared byte-for-byte with the Telegram bot', () 
     await systemRepository.quickCapture('todo email the Ramp recruiter p1 15m recruiting')
     const raw = await readFile(vault.at('Inbox', `${today()}.md`), 'utf8')
     expect(raw).toMatch(
-      /^- \[ \] \d{2}:\d{2} · app · todo email the Ramp recruiter p1 15m recruiting\n$/
+      /^# \d{4}-\d{2}-\d{2}\n\n- \[ \] \d{2}:\d{2} · app · todo email the Ramp recruiter p1 15m recruiting\n$/
     )
   })
 

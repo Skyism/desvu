@@ -43,6 +43,16 @@ export function inboxFileFor(date: DateString): string {
   return `${VAULT_SUBDIRS.inbox}/${date}.md`
 }
 
+/**
+ * A new day file opens with its date as a heading, matching `bot/src/inbox.js`.
+ * Both writers must agree: whichever one happens to capture first that day decides
+ * the file's shape, and a heading that appears only on days the bot saw first would
+ * be a confusing artifact in Obsidian.
+ */
+export function inboxDayHeading(date: DateString): string {
+  return `# ${date}\n\n`
+}
+
 /** A line already ticked off has been routed by the sort skill and is no longer unsorted. */
 const SORTED = /^\s*-\s*\[[xX]\]/
 const TIME_IN_LINE = /^\s*-\s*\[[ xX]?\]\s*(\d{2}):(\d{2})/
@@ -115,8 +125,11 @@ export const inboxRepository = {
     // lines off — all rewriting the same day file, so it takes the cross-process lock too.
     return withFileLock(absolute, async () =>
       withVaultLock(async () => {
-        const existing = (await readTextFileOrNull(absolute)) ?? ''
-        const body = existing === '' ? '' : existing.replace(/\n+$/, '') + '\n'
+        const existing = await readTextFileOrNull(absolute)
+        const body =
+          existing === null || existing === ''
+            ? inboxDayHeading(date)
+            : existing.replace(/\n+$/, '') + '\n'
         await atomicWriteFile(absolute, `${body}${line}\n`)
         return { file: relative, line, at: now.getTime() }
       })

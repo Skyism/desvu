@@ -456,16 +456,34 @@ export const todoRepository = {
     })
   },
 
-  /** Deleting a template also deletes the instances that would otherwise be orphaned. */
+  /**
+   * Deleting a template **detaches** its instances rather than deleting them.
+   *
+   * Cascading would be wrong twice over: the live instance may be half-finished work the
+   * user is part-way through, and the completed ones are history that feeds the T11
+   * correction factors — silently deleting them would move the calibration under the
+   * user's feet. Detaching clears `recurrence_parent`, so each instance survives as an
+   * ordinary one-off, no new ones are ever spawned, and no record is left pointing at a
+   * template that no longer exists.
+   */
   async remove(id: string): Promise<void> {
     await store.mutate((current) => {
       const todos = current.map(normalize)
       const target = todos.find((todo) => todo.id === id)
       if (!target) throw new NotFoundError(`No todo with id ${id}`)
 
-      const remaining = todos.filter(
-        (todo) => todo.id !== id && !(isTemplate(target) && todo.recurrence_parent === id)
-      )
+      const remaining = todos.filter((todo) => todo.id !== id)
+
+      if (isTemplate(target)) {
+        const now = Date.now()
+        for (const todo of remaining) {
+          if (todo.recurrence_parent === id) {
+            todo.recurrence_parent = null
+            todo.updated_at = now
+          }
+        }
+      }
+
       return { data: remaining, result: undefined }
     })
   },

@@ -42,6 +42,7 @@ type Handler = (...args: never[]) => Promise<unknown>
 export const ipcHandlers = {
   // --- todos -------------------------------------------------------------------------
   'todos:list': () => todoRepository.list(),
+  'todos:listTemplates': () => todoRepository.listTemplates(),
   'todos:forDate': (date: DateString) => todoRepository.forDate(date),
   'todos:create': (input: CreateTodoInput) => todoRepository.create(input),
   'todos:update': (id: string, updates: UpdateTodoInput) => todoRepository.update(id, updates),

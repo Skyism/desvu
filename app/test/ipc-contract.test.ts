@@ -83,6 +83,7 @@ describe('every channel actually runs against an empty vault', () => {
   /** One representative call per channel, chosen to be side-effect-light. */
   const calls: Record<string, unknown[]> = {
     'todos:list': [],
+    'todos:listTemplates': [],
     'todos:forDate': [dayOffset(0)],
     'todos:create': [{ text: 'a todo from ipc' }],
     'todos:update': ['__id__', { priority: 1 }],
@@ -232,6 +233,28 @@ describe('every channel actually runs against an empty vault', () => {
         `${channel} should resolve`
       ).resolves.not.toThrow()
     }
+  })
+
+  it('keeps todos:list and todos:listTemplates disjoint across the IPC boundary', async () => {
+    await callChannel('todos:create', {
+      text: 'gym',
+      recurrence: { type: 'daily', interval: 1 },
+    })
+    await callChannel('todos:create', { text: 'a one-off', due: dayOffset(0) })
+    await callChannel('todos:forDate', dayOffset(0))
+
+    const list = (await callChannel('todos:list')) as { id: string; recurrence: unknown }[]
+    const templates = (await callChannel('todos:listTemplates')) as {
+      id: string
+      recurrence: unknown
+    }[]
+
+    expect(templates).toHaveLength(1)
+    expect(list.every((todo) => todo.recurrence === null)).toBe(true)
+    expect(templates.every((todo) => todo.recurrence !== null)).toBe(true)
+
+    const listIds = new Set(list.map((todo) => todo.id))
+    expect(templates.some((todo) => listIds.has(todo.id))).toBe(false)
   })
 
   it('re-throws repository errors as plain messages the renderer can show', async () => {

@@ -272,6 +272,13 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     app.setName('Dès vu')
+
+    // The default User-Agent embeds the product name, and "Dès vu" is not ASCII. HTTP
+    // header values are ByteStrings (one byte per character), so the accent makes
+    // `protocol.handle` throw while building the request's Headers — every asset served
+    // over `desvu://` would be at risk. Strip the UA down to printable ASCII.
+    app.userAgentFallback = app.userAgentFallback.replace(/[^\x20-\x7e]/g, '')
+
     registerAppProtocol()
 
     // Owned by the storage workstream (`src/main/ipc-router.ts`). Registers a handler

@@ -1,0 +1,120 @@
+/* Renderer entry stylesheet.
+ *
+ * Import order is load-bearing: fonts first (generated, do not hand-edit and do not
+ * write @font-face anywhere else), then Tailwind, then the tokens that feed it.
+ * Every woff2 is local — the app makes no external network requests. */
+
+@import '../../public/fonts/fonts.css';
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    /* DM Sans carries an optical-size axis; this engages it. */
+    font-optical-sizing: auto;
+    font-size: var(--text-base);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden; /* the app frame scrolls its own panes */
+  }
+
+  ::selection {
+    background: var(--soft);
+  }
+
+  a {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+
+  /* One focus treatment everywhere. Gold, because gold means "interact with this". */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* Numbers in tables and meta should never jitter as they update. */
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--fill);
+    border-radius: var(--radius-pill);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--hover-strong);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* The ruled-paper gradient behind the Today hero. */
+  .bg-ruled {
+    background-image: var(--ruled);
+  }
+
+  /* The one transition in the system. Quiet and short — this app should never feel
+     animated. Anything that needs a different curve is a design decision, not a
+     component decision, and belongs in the brief first. */
+  .transition-quiet {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-quiet);
+  }
+
+  /* macOS `titleBarStyle: 'hiddenInset'` leaves the traffic lights floating over the
+     app. These two mark what the user can grab to move the window. Interactive
+     elements inside a drag region MUST carry `.no-drag` or they stop being clickable. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@layer utilities {
+  /* Cormorant italic marks an agent estimate or an aside — the typography is itself
+     the disclaimer. Never apply italic to DM Sans; there is no italic cut. */
+  .text-estimate {
+    font-family: var(--font-display);
+    font-style: italic;
+    color: var(--muted);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

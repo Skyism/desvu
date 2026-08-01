@@ -115,6 +115,52 @@ describe('recurrence', () => {
     expect(list.every((todo) => todo.recurrence === null)).toBe(true)
   })
 
+  it('surfaces templates only through listTemplates, never through list or forDate', async () => {
+    const template = await dailyTemplate()
+    await todoRepository.create({ text: 'an ordinary todo', due: today() })
+
+    const templates = await todoRepository.listTemplates()
+    expect(templates.map((todo) => todo.id)).toEqual([template.id])
+    expect(templates[0]?.recurrence).toEqual({ type: 'daily', interval: 1 })
+
+    expect((await todoRepository.list()).map((todo) => todo.id)).not.toContain(template.id)
+    expect((await todoRepository.forDate(today())).map((todo) => todo.id)).not.toContain(
+      template.id
+    )
+  })
+
+  it('does not report materialized instances as templates', async () => {
+    await dailyTemplate()
+    await todoRepository.forDate(today())
+
+    const templates = await todoRepository.listTemplates()
+    expect(templates).toHaveLength(1)
+    expect(templates.every((todo) => todo.recurrence !== null)).toBe(true)
+    expect(templates.every((todo) => todo.recurrence_parent === null)).toBe(true)
+  })
+
+  it('returns nothing when no recurring task has ever been created', async () => {
+    await todoRepository.create({ text: 'a one-off' })
+    await expect(todoRepository.listTemplates()).resolves.toEqual([])
+  })
+
+  it('lets a template found through listTemplates be edited and turned off', async () => {
+    await dailyTemplate()
+    const [template] = await todoRepository.listTemplates()
+    expect(template).toBeDefined()
+
+    // Editing the rule affects future instances only — the id is reachable, which is the
+    // whole point of listTemplates.
+    const edited = await todoRepository.update((template as Todo).id, {
+      recurrence: { type: 'weekly', interval: 1, days: ['mon'] },
+      text: 'gym (mondays only)',
+    })
+    expect(edited.recurrence).toEqual({ type: 'weekly', interval: 1, days: ['mon'] })
+
+    await todoRepository.remove((template as Todo).id)
+    await expect(todoRepository.listTemplates()).resolves.toEqual([])
+  })
+
   it('materializes exactly one instance after a ten-day absence — no backlog', async () => {
     await dailyTemplate()
 
@@ -216,11 +262,65 @@ describe('recurrence', () => {
     )
   })
 
-  it('removes orphaned instances when the template is deleted', async () => {
+  it('detaches instances when the template is deleted, so half-done work survives', async () => {
     const template = await dailyTemplate()
-    await todoRepository.forDate(today())
+    const [instance] = await todoRepository.forDate(today())
+    expect(instance).toBeDefined()
+
+    // The user is part-way through today's gym session when they turn the rule off.
+    await todoRepository.update((instance as Todo).id, { status: 'doing' })
     await todoRepository.remove(template.id)
-    await expect(todoRepository.listAll()).resolves.toEqual([])
+
+    const remaining = await todoRepository.listAll()
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]?.id).toBe((instance as Todo).id)
+    expect(remaining[0]?.status).toBe('doing')
+    // It is now an ordinary one-off: no dangling pointer to a template that is gone.
+    expect(remaining[0]?.recurrence_parent).toBeNull()
+    expect(remaining[0]?.recurrence).toBeNull()
+
+    // It still shows up as normal work, and no new instance is ever spawned again.
+    const day = await todoRepository.forDate(today())
+    expect(day.map((todo) => todo.id)).toEqual([(instance as Todo).id])
+  })
+
+  it('keeps completed instances as history when the template is deleted', async () => {
+    const template = await dailyTemplate()
+    const [instance] = await todoRepository.forDate(today())
+    await todoRepository.complete((instance as Todo).id, 55)
+
+    await todoRepository.remove(template.id)
+
+    const remaining = await todoRepository.listAll()
+    // The completed instance and the one its completion spawned both survive, detached.
+    expect(remaining.every((todo) => todo.recurrence_parent === null)).toBe(true)
+    const completed = remaining.find((todo) => todo.status === 'done')
+    expect(completed?.actual_minutes).toBe(55)
+  })
+
+  it('leaves the calibration data intact when a recurring rule is turned off', async () => {
+    // Cascading deletes would silently move the T11 correction factor under the user.
+    const template = await todoRepository.create({
+      text: 'daily standup',
+      category: 'school',
+      estimate_minutes: 60,
+      recurrence: { type: 'daily', interval: 1 },
+      due: dayOffset(-1),
+    })
+    const [instance] = await todoRepository.forDate(today())
+    await todoRepository.complete((instance as Todo).id, 90)
+
+    const before = (await todoRepository.correctionFactors()).find(
+      (factor) => factor.category === 'school'
+    )
+    await todoRepository.remove(template.id)
+    const after = (await todoRepository.correctionFactors()).find(
+      (factor) => factor.category === 'school'
+    )
+
+    expect(after?.sample_size).toBe(before?.sample_size)
+    expect(after?.factor).toBe(before?.factor)
+    expect(after?.sample_size).toBe(1)
   })
 
   it('honours a monthly rule', async () => {

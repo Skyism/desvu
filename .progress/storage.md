@@ -1,7 +1,8 @@
 # Storage layer — report
 
 **Agent:** storage · **Stage:** 2 · **Status:** complete
-**Verification:** `npx vitest run` → **136 passed / 0 failed** (10 files) · `npx tsc --noEmit` → **clean**
+**Verification:** `npx vitest run` → **143 passed / 0 failed** (10 files) · `npx tsc --noEmit` → **clean**
+All 51 `IPC_CHANNELS` entries have handlers, enforced at compile time *and* at runtime.
 
 ---
 
@@ -44,11 +45,12 @@ the interface and have no IPC channel — they exist for other repositories or f
 | Method | Notes |
 |---|---|
 | `list()` | All statuses, **templates excluded** (a template is a rule, not a task). Sorted priority → due → newest. |
+| `listTemplates()` | The templates themselves, and the only route to a template id. Disjoint from `list()` by construction. |
 | `forDate(date)` | Open/doing, `due <= date`. Materializes recurrence instances as a side effect. |
 | `create(input)` | Fills `priority` / `estimate_minutes` from settings. A template with no `due` anchors today. |
 | `update(id, updates)` | Explicit-`undefined` keys are dropped, so a partial patch cannot erase a field. Keeps `completed_at` consistent with `status`. |
 | `complete(id, actualMinutes)` | Banks the actual, spawns **exactly one** next instance. Throws on a template. |
-| `reopen(id)` · `remove(id)` | `remove` on a template also removes its instances. |
+| `reopen(id)` · `remove(id)` | `remove` on a template **detaches** its instances rather than cascading — see decision 14. |
 | `dayLoad(date, now?)` | `{ committed, free, due, corrected_due, overflow }`. `now` injectable for tests. |
 | `correctionFactors()` | One row per category, always. `confident` at ≥ 25 samples. |
 | `listAll()` **(extra)** | Everything, templates and completed included — search uses it. |
@@ -148,9 +150,9 @@ path, before any write. Tested: the damaged bytes are still on disk afterwards.
 ## Decisions you should know about
 
 1. **`list()` excludes recurrence templates**, per the `Todo.recurrence` comment in the
-   shared contract ("templates never appear in a list"). Consequence: there is currently
-   **no way to enumerate or manage templates through `DesvuApi`** — see *Contract changes*.
-   Search reaches them via `listAll()`, so they are not invisible, just unmanageable.
+   shared contract ("templates never appear in a list"). `listTemplates()` is the one place
+   they surface, so a recurring task can be edited and turned off. The two are disjoint by
+   construction, asserted at the repository layer and again across IPC.
 2. **`forDate` excludes undated todos.** Folding the whole backlog into "due today" makes
    the headline committed-vs-free number meaningless. It includes overdue items, which are
    real committed time (T7).
@@ -183,15 +185,25 @@ path, before any write. Tested: the damaged bytes are still on disk afterwards.
     guessing. Falls back to file mtime for `lastRefresh`.
 13. **`reopen()` does not un-spawn** an instance that completion already scheduled. Undoing
     a side effect on undo felt more surprising than leaving it.
+14. **Deleting a template detaches its instances; it does not cascade.** Each instance gets
+    `recurrence_parent: null` and survives as an ordinary one-off. Cascading would be wrong
+    twice: the live instance may be half-finished work the user is part-way through, and the
+    completed ones are history feeding the T11 correction factors — deleting them would move
+    the calibration under the user's feet with no visible cause. Detaching also leaves no
+    record pointing at a template that no longer exists, and no new instance is ever spawned
+    again. Tested for all three: the `doing` instance survives, completed history survives,
+    and the correction factor is byte-identical before and after.
 
 ---
 
-## Contract changes I need (not made — orchestrator owns these files)
+## Contract changes
 
-1. **`todos.listTemplates()` on `DesvuApi`** (channel `todos:listTemplates`). Without it a
-   recurring task cannot be discovered, edited, or deleted from the UI — `update`/`remove`
-   work on a template id, but nothing hands the UI one. This is the only real gap in the
-   surface.
+1. ~~**`todos.listTemplates()` on `DesvuApi`**~~ — **resolved.** The orchestrator added
+   `listTemplates()` and `'todos:listTemplates'` to the contract; the repository method,
+   the handler, and the tests are in. Nothing on `DesvuApi` is unimplemented.
+
+### Still outstanding (not made — orchestrator owns these files)
+
 2. **`types.ts` could export the value-level unions** it already has as types:
    `MEAL_SLOTS`, `WORKOUT_TYPES`, `TODO_STATUSES`, `SOURCES`, `PRIORITIES`,
    `LIBRARY_TYPES`, `LIBRARY_STATUSES`. They are currently re-declared in
@@ -199,26 +211,25 @@ path, before any write. Tested: the damaged bytes are still on disk afterwards.
    union if a member is ever added. Not urgent; noted so it does not go unnoticed.
 3. **`ipc.ts` uses `Timestampish` before it is declared** (line 112 vs 141). Legal, compiles
    fine, mildly confusing to read. Cosmetic.
-4. **The vault's `.gitignore` should ignore `data/.desvu.lock` and `data/.*.tmp`.** Both are
-   transient; a crash can leave one behind and it should never be committed. That file is
-   in the vault, not in my tree.
+4. ~~**The vault's `.gitignore` should ignore `data/.desvu.lock` and `data/.*.tmp`**~~ —
+   **resolved** by the orchestrator.
 
 ---
 
-## Test coverage (136 tests)
+## Test coverage (143 tests)
 
 | Suite | Tests | Covers |
 |---|---|---|
 | `storage-core` | 11 | Lock serialization and non-interleaving, failed op does not wedge the queue, per-file independence, 30 concurrent creates lose nothing, no temp turds, temp cleanup on failure, concurrent reader never sees a torn file, missing/empty file seeds, malformed JSON fails loudly and leaves the bytes alone |
 | `vault-lock` | 12 | **Two real processes contending** (child process implementing the protocol independently), foreign writer waits for us, stale steal with a genuinely dead pid, refusal to steal a live pid, refusal to steal a foreign host however old, refusal to steal a fresh lock, truncated-lock recovery, release on throw and on reject, no lock left after concurrent writes, diagnosable record contents |
-| `todos` | 27 | Defaults, every validation path, forDate semantics, no-backlog after 10 days, idempotent materialization, roll-forward, spawn-exactly-one, late completion schedules forward, dropped never resurrected, template guards, monthly rules, correction-factor confidence at 24 vs 25, dayLoad with/without calendar, overflow order, corrected minutes |
+| `todos` | 33 | Defaults, every validation path, forDate semantics, no-backlog after 10 days, idempotent materialization, roll-forward, spawn-exactly-one, late completion schedules forward, dropped never resurrected, template guards, monthly rules, correction-factor confidence at 24 vs 25, dayLoad with/without calendar, overflow order, corrected minutes. **`listTemplates` disjoint from `list` and `forDate`, instances never reported as templates, a template is editable and removable by the id it hands back, deleting a template preserves a `doing` instance, preserves completed history, and leaves the correction factor unchanged** |
 | `journal` | 13 | Rating-only entries, 1–7 bounds, upsert, streak ending today and yesterday, **0 after a 24-day gap with no broken-ish key anywhere**, banked longest survives deleting every entry, longest run anywhere in history, metadata projection withholding prose |
 | `trackers` | 19 | Unknown finance category still logs, negative amounts, month summary against limits including zero-spend and uncategorised, period boundaries, meals with no numbers, `estimated` flag, meal ordering, workout types, settings seeding/merge/array replacement/rejection |
 | `library` | 13 | Documented front matter incl. inline comments and inline lists, no-front-matter notes, dated slugs, derived source host, collision-safe filenames, round trip preserving body and unknown keys, archived hidden but present, auto-archive only unread and only past the window, idempotence, traversal refusal, `fitting` ordering |
 | `brain-dump` | 7 | Thread creation under a topic, listing, hand-written threads, **append adds a dated block to the existing file** (file count stays 1), same-day appends join one heading, empty/missing/traversal rejection, 10 concurrent appends lose nothing |
 | `inbox-system` | 17 | Exact bot line format incl. attachments and zero-padding, append ordering, quick capture, concurrent captures, ticked lines excluded, non-conforming lines kept, calendar missing/object/array/garbage, `obsidian://` encoding, path refusals |
 | `search` | 9 | All eight hit kinds from one query, path on markdown hits, all-terms matching, title outranks body, **archived library item**, **completed todo**, **dropped todo**, **recurrence template**, journal prose still findable under `metadata` |
-| `ipc-contract` | 8 | `IPC_CHANNELS` ↔ handlers exact parity both directions, all handlers are functions, no duplicate channels, naming convention, register/unregister against a fake `ipcMain`, **every channel invoked for real against a temp vault**, errors re-thrown as plain messages |
+| `ipc-contract` | 9 | `IPC_CHANNELS` ↔ handlers exact parity both directions, all handlers are functions, no duplicate channels, naming convention, register/unregister against a fake `ipcMain`, **all 51 channels invoked for real against a temp vault**, `todos:list` / `todos:listTemplates` disjoint across the boundary, errors re-thrown as plain messages |
 
 Every test runs against a fresh temp vault in `os.tmpdir()` via `DESVU_VAULT`.
 `~/Documents/Dès vu` is never opened for writing by the suite — verified by hand after the
@@ -232,10 +243,14 @@ lost record, exactly as intended.
 
 ## Deliberately not done
 
-- **No file watcher.** `IPC_EVENTS.vaultChanged` exists in the contract but nothing emits
-  it. Watching the vault for external changes (Obsidian, the bot, `/sort-inbox`) belongs in
-  `main/index.ts`, which another agent owns. The repositories are stateless per call, so a
-  watcher only needs to tell the renderer to re-fetch.
+- **File watcher — no longer mine, and confirmed sufficient.** The design-system agent built
+  it in `src/main/index.ts` (debounced 250 ms, broadcasting `IPC_EVENTS.vaultChanged`); I did
+  not duplicate it. Two things make it correct against this storage layer: **(a)** the
+  repositories hold no cache — every call re-reads from disk, so a "re-fetch" notification is
+  all the renderer ever needs; **(b)** its `isIgnored` filter drops dotfiles, which is exactly
+  right for atomic writes. My temp files are `.<name>.<pid>-<n>.tmp` and the lock is
+  `.desvu.lock`, so lock churn and staging writes raise no events, while the `rename` onto the
+  real filename does. One user-visible change produces one revalidation.
 - **No caching.** Every call re-reads from disk. At ~10k records this is comfortably inside
   the "instant" budget; if it ever is not, the seam is `json-store.read()`.
 - **No import/dedupe path.** The original's `importEntries` was not ported — the journal
