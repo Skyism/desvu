@@ -8,7 +8,8 @@ import { Issues, checkDate, checkFiniteNumber, checkSource } from '../lib/valida
 import { settingsRepository } from './settingsRepository'
 
 /** Where a purchase with a blank category is filed. Taxonomy never blocks capture (F4). */
-export const UNCATEGORISED = 'uncategorised'
+import { UNCATEGORISED } from '@shared/types'
+export { UNCATEGORISED }
 
 const store = createJsonStore<FinanceFile>(
   () => dataPath('finance.json'),
@@ -159,6 +160,7 @@ export const financeRepository = {
           category,
           spent,
           limit,
+          configured: limits.has(category),
           fraction: limit !== null && limit > 0 ? Number((spent / limit).toFixed(4)) : null,
         }
       })

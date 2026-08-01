@@ -2,6 +2,7 @@ import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
 
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
+import { SearchOverlay } from '@/components/search'
 import { QuickCapture } from '@/components/shell/QuickCapture'
 import { Sidebar } from '@/components/shell/Sidebar'
 import { ToastProvider } from '@/components/Toast'
@@ -14,6 +15,7 @@ export function App(): React.JSX.Element {
     <ToastProvider>
       <Shell />
       <QuickCapture />
+      <SearchOverlay />
     </ToastProvider>
   )
 }

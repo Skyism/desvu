@@ -125,10 +125,27 @@ export interface BudgetCategory {
   limit: number | null
 }
 
+/**
+ * The bucket a purchase falls into when its category is blank. Lives here rather than in
+ * the repository because both the main process and the renderer need to recognise it, and
+ * two copies of a magic string is a drift waiting to happen.
+ */
+export const UNCATEGORISED = 'uncategorised'
+
 export interface CategorySpend {
   category: string
   spent: number
+  /** Null means no cap — see `configured` to tell "uncapped" from "not a budget line". */
   limit: number | null
+  /**
+   * Whether this category exists in `settings.finance.categories`.
+   *
+   * Without it, `limit: null` is ambiguous between "the user defined this category and
+   * chose not to cap it" and "money landed in a category nobody ever defined". Those
+   * render differently, and resolving it in the UI means re-reading settings just to
+   * interpret a summary that already had the answer.
+   */
+  configured: boolean
   /** Null when there is no limit. */
   fraction: number | null
 }
@@ -288,4 +305,12 @@ export interface SearchHit {
   date: DateString | null
   /** Vault-relative path for markdown-backed hits, so Obsidian can be opened at it. */
   path?: string
+  /**
+   * The record's own status, when it has one — `archived`, `done`, `dropped`, `unread`.
+   *
+   * Search deliberately reaches records the default views hide (PRD S1–S3), so without
+   * this the user gets a result they cannot find anywhere else and no explanation of why.
+   * Absent for records with no meaningful state, like a journal entry or a purchase.
+   */
+  state?: string
 }

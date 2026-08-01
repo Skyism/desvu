@@ -11,10 +11,20 @@ import { QUICK_CAPTURE_HINT } from './QuickCapture'
 export function GlobalControls(): React.JSX.Element {
   const inbox = useInboxCount()
   const openQuickCapture = useUi((state) => state.openQuickCapture)
+  const openSearch = useUi((state) => state.openSearch)
 
   return (
     <>
       <InboxPill count={inbox.data} failed={inbox.error != null} loading={inbox.loading} />
+      <Button
+        variant="secondary"
+        size="md"
+        shape="pill"
+        onClick={openSearch}
+        title="Search everything — ⌘K"
+      >
+        Search <span className="text-muted ml-1">⌘K</span>
+      </Button>
       <Button
         variant="secondary"
         size="md"

@@ -204,6 +204,25 @@ Obsidian is the exception — it writes markdown notes, not trackers, and cannot
 take a lock. Markdown records are single-file writes, so the exposure is limited to a
 concurrent edit of the same note.
 
+### Never let anything write to the real vault
+
+`~/Documents/Dès vu` is a **symlink** to the iCloud container and holds live personal data:
+83 real journal entries, six months of history, **no git remote**. Anything that writes
+during development must point `DESVU_VAULT` at a throwaway directory. Both seed scripts
+refuse to write anywhere inside the real vault; keep it that way.
+
+This has already gone wrong once. A stray real directory at `~/Documents/Dès vu`
+containing four seed files shadowed the vault, because `isVault()` accepted any directory
+with a `data/` child and that path is searched first. The app read an empty vault while
+the real corpus sat untouched. Discovery now requires `PRD.md` or `data/SCHEMAS.md` —
+markers nothing writes programmatically — so a directory cannot impersonate the vault
+again. An explicit `DESVU_VAULT` is still trusted without markers, which is what keeps
+temp vaults working in tests.
+
+If you ever find `~/Documents/Dès vu` is a directory rather than a symlink, that is the
+bug recurring. The real bytes are always at
+`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Dès vu`.
+
 ## Conventions
 
 - **Storage pattern** is ported from `~/Desktop/Vscode/gratefulnessjar/server/entryRepository.ts`:

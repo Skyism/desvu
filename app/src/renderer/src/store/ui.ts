@@ -51,6 +51,16 @@ interface UiState {
   quickCaptureOpen: boolean
   openQuickCapture: () => void
   closeQuickCapture: () => void
+
+  /**
+   * Search lives here rather than inside the overlay so a visible control can open it.
+   * ⌘K alone is undiscoverable, and a recall feature nobody finds is a recall feature
+   * that does not exist.
+   */
+  searchOpen: boolean
+  openSearch: () => void
+  closeSearch: () => void
+  setSearchOpen: (open: boolean) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
@@ -87,6 +97,11 @@ export const useUi = create<UiState>((set, get) => ({
   quickCaptureOpen: false,
   openQuickCapture: () => set({ quickCaptureOpen: true }),
   closeQuickCapture: () => set({ quickCaptureOpen: false }),
+
+  searchOpen: false,
+  openSearch: () => set({ searchOpen: true }),
+  closeSearch: () => set({ searchOpen: false }),
+  setSearchOpen: (open: boolean) => set({ searchOpen: open }),
 }))
 
 /** What is actually on screen right now, with `system` already resolved. */

@@ -123,6 +123,7 @@ async function collectCandidates(): Promise<Candidate[]> {
         title: todo.text,
         snippet: '',
         date: todo.due,
+        state: todo.status,
       },
       haystack: [todo.text, todo.notes, todo.tags.join(' '), todo.category, todo.status].join(' '),
       weight: 1.2,
