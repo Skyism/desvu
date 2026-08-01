@@ -216,7 +216,7 @@ describe.skipIf(!available)('byte compatibility with /sort-inbox', () => {
     )
   }
 
-  it('produces the same file the sort skill would, modulo one frontmatter key', async () => {
+  it('produces byte-identical output to the sort skill', async () => {
     const today = dayOffset(0)
 
     // The app's append.

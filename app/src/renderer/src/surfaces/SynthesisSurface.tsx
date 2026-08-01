@@ -103,6 +103,13 @@ export function SynthesisSurface(): React.JSX.Element {
     [toast]
   )
 
+  /** Must stay in step with `openNote` above — the tooltip is a promise about the click. */
+  const describeNote = useCallback((ref: NoteRef) => {
+    if (ref.kind === 'synthesis') return `Read ${ref.title}`
+    if (ref.kind === 'brain-dump') return `Open the ${ref.title} thread`
+    return `Open ${ref.path} in Obsidian`
+  }, [])
+
   return (
     <Page
       title={ROUTES.synthesis.title}
@@ -119,10 +126,15 @@ export function SynthesisSurface(): React.JSX.Element {
         )
       }
     >
-      <NoteLinkProvider index={index} openNote={openNote} openPath={openPath}>
+      <NoteLinkProvider
+        index={index}
+        openNote={openNote}
+        openPath={openPath}
+        describeNote={describeNote}
+      >
         {!synthesis.settled && !synthesis.error && (
           <Card variant="band">
-            <div className="mx-auto flex max-w-[68ch] flex-col gap-5">
+            <div className="flex max-w-[68ch] flex-col gap-5">
               <Skeleton width="38%" height={28} radius="control" />
               <SkeletonLines lines={8} />
             </div>
@@ -173,7 +185,10 @@ function WriteUp({
 }): React.JSX.Element {
   return (
     <Card variant="band">
-      <div className="mx-auto flex min-w-0 max-w-[68ch] flex-col gap-7">
+      {/* Left-aligned, not centred. The Sources, Ask and journal-access cards below all
+          start at the page's left edge, and a centred write-up would give one surface two
+          different left edges. The band still runs full width; only the measure is capped. */}
+      <div className="flex min-w-0 max-w-[68ch] flex-col gap-7">
         <header className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-2">
           <div className="min-w-0">
             <Eyebrow>{formatWeekLabel(note.week)}</Eyebrow>

@@ -334,6 +334,29 @@ itself. Worth watching whether it survives page 60.
 `
 )
 
+// -- An earlier week, so [[2026-W30]] resolves week-to-week ------------------
+write(
+  'Synthesis/2026-W30.md',
+  `---
+week: 2026-W30
+generated: 2026-07-26
+---
+
+A quiet week that turned out to be setup for the next one.
+
+## What you thought about
+
+You started [[systems-design-interviews]] on the 12th and did not come back to it. The
+allocator work in [[malloc-lab]] took the whole week instead.
+
+## Across the trackers
+
+Every rated day above 4 had a workout on it. Coffee was 22% of discretionary spend.
+
+> Watch whether the allocator thread turns into interview prep or stays coursework.
+`
+)
+
 // -- Settings ----------------------------------------------------------------
 write(
   'data/settings.json',

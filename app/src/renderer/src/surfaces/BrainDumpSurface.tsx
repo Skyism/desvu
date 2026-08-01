@@ -96,6 +96,15 @@ export function BrainDumpSurface(): React.JSX.Element {
     [toast]
   )
 
+  /** Must stay in step with `openNote` above — the tooltip is a promise about the click. */
+  const describeNote = useCallback(
+    (ref: NoteRef) =>
+      ref.kind === 'brain-dump'
+        ? `Open the ${ref.title} thread`
+        : `Open ${ref.path} in Obsidian`,
+    []
+  )
+
   const onAppend = useCallback(
     async (text: string) => {
       if (!selected) return
@@ -129,7 +138,12 @@ export function BrainDumpSurface(): React.JSX.Element {
         </Button>
       }
     >
-      <NoteLinkProvider index={index.data ?? EMPTY_NOTE_INDEX} openNote={openNote} openPath={openPath}>
+      <NoteLinkProvider
+        index={index.data ?? EMPTY_NOTE_INDEX}
+        openNote={openNote}
+        openPath={openPath}
+        describeNote={describeNote}
+      >
         {!settled && !failed && <LoadingCards />}
 
         {failed && (

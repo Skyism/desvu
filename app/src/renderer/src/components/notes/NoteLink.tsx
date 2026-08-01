@@ -17,23 +17,39 @@ interface NoteLinkContextValue {
   openNote: (ref: NoteRef) => void
   /** Follow a link to a file that is not a note — an attachment, usually. */
   openPath: (vaultRelativePath: string) => void
+  /**
+   * The tooltip for a resolved link.
+   *
+   * This lives with `openNote` and not inside `<WikiLink>` on purpose: only the surface
+   * knows where its own `openNote` goes. Synthesis reads a cited week in place while Brain
+   * dump hands the same note to Obsidian, so a tooltip derived from `ref.kind` alone would
+   * promise the wrong thing on one of them.
+   */
+  describeNote: (ref: NoteRef) => string
 }
+
+const openInObsidian = (ref: NoteRef): string => `Open ${ref.path} in Obsidian`
 
 const NoteLinkContext = createContext<NoteLinkContextValue>({
   index: EMPTY_NOTE_INDEX,
   openNote: () => {},
   openPath: () => {},
+  describeNote: openInObsidian,
 })
 
 export function NoteLinkProvider({
   index,
   openNote,
   openPath,
+  describeNote = openInObsidian,
   children,
-}: NoteLinkContextValue & { children: ReactNode }): React.JSX.Element {
+}: Omit<NoteLinkContextValue, 'describeNote'> & {
+  describeNote?: (ref: NoteRef) => string
+  children: ReactNode
+}): React.JSX.Element {
   const value = useMemo(
-    () => ({ index, openNote, openPath }),
-    [index, openNote, openPath]
+    () => ({ index, openNote, openPath, describeNote }),
+    [index, openNote, openPath, describeNote]
   )
   return <NoteLinkContext.Provider value={value}>{children}</NoteLinkContext.Provider>
 }
@@ -63,7 +79,7 @@ const RESOLVED_CLASS = cn(
  * damage would be both wrong and, in a corpus that is mostly forward references, noisy.
  */
 export function WikiLink({ target, heading, alias, embed }: WikiLinkProps): React.JSX.Element {
-  const { index, openNote, openPath } = useNoteLinks()
+  const { index, openNote, openPath, describeNote } = useNoteLinks()
   const label = wikilinkLabel({ target, heading, alias })
 
   // `![[photo.jpg]]` — the bot writes these for every attachment. Vault files cannot be
@@ -101,11 +117,7 @@ export function WikiLink({ target, heading, alias, embed }: WikiLinkProps): Reac
     <button
       type="button"
       onClick={() => openNote(ref)}
-      title={
-        ref.kind === 'brain-dump'
-          ? `Open the ${ref.title} thread`
-          : `Open ${ref.path} in Obsidian`
-      }
+      title={describeNote(ref)}
       className={RESOLVED_CLASS}
     >
       {embed && (

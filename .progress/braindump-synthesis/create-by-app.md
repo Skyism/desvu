@@ -1,10 +1,11 @@
 ---
-topic: Reading
-title: Why I abandon books
+topic: Reading2
 created: 2026-08-01
 updated: 2026-08-01
 tags: []
 ---
 
+# Why I abandon books
+
 ## 2026-08-01
-Always around page 60. Long enough to have paid for it. Compare [[why-i-abandon-books]].
+Always around page 60. Long enough to have paid for it.

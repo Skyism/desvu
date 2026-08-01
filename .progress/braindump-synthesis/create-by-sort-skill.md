@@ -8,4 +8,4 @@ tags: []
 # Why I abandon books
 
 ## 2026-08-01
-Always around page 60. Long enough to have paid for it. Compare [[why-i-abandon-books]].
+Always around page 60. Long enough to have paid for it.

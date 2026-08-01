@@ -1,11 +1,17 @@
 # Brain dump + synthesis — report
 
 **Stage 12.** PRD **B1 · B2 · B3 · B4 · J7 · J8**.
-`tsc --noEmit` clean for every file in this workstream · `electron-vite build` clean ·
-`vitest run` **414 passed / 21 files**, of which **49 are new here**.
+`tsc --noEmit` clean · `electron-vite build` clean · `vitest run` **421 passed / 22 files**,
+of which **49 are from this workstream**.
 Driven live in real Electron against a seeded temp vault, both themes.
 
 No dependency was added. `app/package.json` is untouched.
+
+> **Second pass, after the orchestrator landed the synthesis API and both format fixes.**
+> Everything below has been re-verified against the running app. The two issues this report
+> originally raised as blocking are closed; the sections that described them now describe
+> what was observed once they were fixed. See **Second pass** at the end for what that pass
+> found, including one bug of my own it surfaced.
 
 ---
 
@@ -121,61 +127,64 @@ reading. `test/braindump-ui-append.test.ts` shells out to the real script from
 `~/Documents/Dès vu/.claude/skills/sort-inbox/scripts/` (skipping cleanly if it or python3
 is absent) and diffs the two vaults. All three round-trip tests run and pass.
 
-**Result: everything below the front matter is byte-identical.** The app and the skill
-produce the same body, the same blank lines, the same trailing newline. Confirmed both in
-the test and by hand in the live app-driven vault.
+**Result: the two writers produce byte-identical files.** Same front matter, same body, same
+blank lines, same trailing newline, same md5. (This originally read "everything below the
+front matter", because the front matter did diverge; see the section below.) Confirmed both
+in the test and by hand in the live app-driven vault.
 
 Three behaviours verified end to end:
 
 1. **App appends → the skill extends it.** The skill found the app's `## 2026-08-01`
    heading and joined that day's section rather than opening a second one; the app's whole
-   prefix survived verbatim, `title:` and `tags: ["213", lab]` included. `diff` showed only
-   the three added lines. (`braindump-synthesis/append-app-then-skill.md`)
+   prefix survived verbatim, `tags: ["213", lab]` included. `diff` showed only the three
+   added lines. (`braindump-synthesis/append-app-then-skill.md`)
 2. **Skill appends → the app appends on top.** One heading, correct order, no triple
    newlines.
 3. **Same-day merges join rather than repeat**, in both directions.
 
-### Two divergences — both in `src/main/repos/brainDumpRepository.ts`, which I do not own
+### Two divergences — found here, fixed by the orchestrator, re-verified
 
-Reporting rather than working around, per the brief. Neither breaks either reader: the
-skill's `read_frontmatter` preserves unknown keys, and the repository's `toThread` falls
-back to an H1 when frontmatter has no `title`. But they mean a vault accumulates two
-flavours of thread file, which is the failure mode this section exists to prevent.
+Both were in `src/main/repos/brainDumpRepository.ts`, which this workstream does not own, so
+they were reported rather than worked around. Neither broke either reader, but they meant a
+vault would accumulate two flavours of thread file depending on which writer created it —
+the exact failure mode this section exists to prevent.
 
-**1. `appendToThread` introduces a `title:` key the skill never writes.** `toFrontmatter()`
-unconditionally does `data.title = thread.title`. On a skill-created thread that value comes
-from the body's H1, so the append writes it into the front matter as well. The key then
-survives every later write by both writers, so the two converge after one app append — but
-the first one is not byte-identical.
+1. **`appendToThread` introduced a `title:` key the skill never writes.** `toFrontmatter()`
+   set it unconditionally; on a skill-created thread the value came from the body's H1, so
+   the append copied it into the front matter as well.
+2. **`createThread` wrote `title:` in front matter and no `# Title` in the body** — the exact
+   inverse of `apply_braindump`.
 
-```
---- what /sort-inbox would have written
-+++ what the app wrote
-   updated: 2026-08-01
-   tags: ["213", lab]
-+  title: Malloc lab
-```
+Both are fixed: `toFrontmatter` no longer emits `title`, and `createThread` writes the H1.
+The three tests that pinned the divergence failed the moment the fix landed and now assert
+convergence outright — `expect(fromApp).toBe(fromSkill)`, a strictly stronger claim than the
+"modulo one frontmatter key" it replaced. (One test name still said "modulo one frontmatter
+key" after the update; renamed to `produces byte-identical output to the sort skill`, since a
+name that describes the old behaviour is a stale claim about what is being checked.)
 
-Fix, one line in `toFrontmatter`: only set `title` when `existing.title` is already present
-or the body has no H1.
-
-**2. `createThread` writes `title:` in front matter and no `# Title` in the body; the skill
-does the opposite.** (`braindump-synthesis/create-by-{app,sort-skill}.md`)
+**Re-verified end to end through the real UI, not just in the test.** Two vaults from one
+pristine file: appended to the first through the running app's textarea and ⌘↵, ran the real
+`inbox_commit.py` on the second with the same text and date.
 
 ```
-$ diff create-by-sort-skill.md create-by-app.md
-2a3
-> title: Why I abandon books
-8,9d8
-< # Why I abandon books
-<
+$ diff bd-vault/Brain\ Dump/School/approximation-algorithms.md \
+       bd-cmpB/Brain\ Dump/School/approximation-algorithms.md
+$ md5 -q …/bd-vault/… …/bd-cmpB/…
+ea34717db6ba7e49176e32fe1e591460
+ea34717db6ba7e49176e32fe1e591460
 ```
 
-Fix: have `createThread` seed the body with `# ${title}` and leave `title` out of the front
-matter, matching `apply_braindump`. Both changes are small and both are covered by
-`test/braindump-ui-append.test.ts`, which currently pins the *observed* behaviour with a
-comment pointing here — so the tests will fail loudly when the fix lands and want their
-assertions tightened.
+Byte-identical, same hash, no `title:` key on either side. Both writers also agree on the
+numeric-looking tag: the seed's `tags: [451]` becomes `tags: ["451"]` from either writer,
+because the app parses `451` as a number, `readStringArray` maps it back to a string, and
+`quoteIfNeeded` quotes it exactly as Python's `yaml_scalar` does.
+
+**Creation matches too.** Started a thread through the dialog and had the skill create the
+same thread from an Inbox line; the two files are identical apart from the topic folder name,
+which differed only because both had to exist side by side to be compared. Both now carry
+`topic/created/updated/tags` and `# Why I abandon books` as the body's H1.
+`braindump-synthesis/create-by-{app,sort-skill}.md` have been regenerated against the fixed
+code, so they are evidence of the current behaviour rather than of the old divergence.
 
 **One cosmetic nit in the skill, not the app:** `apply_braindump`'s same-day merge leaves
 the file ending in two newlines (`doc[insert_at:].lstrip("\n")` is empty at the tail). The
@@ -223,47 +232,48 @@ moves to `metadata` and `full` goes muted.
 
 ---
 
-## ⚠️ Blocking gap — `DesvuApi` has no way to read `Synthesis/`
+## The synthesis API — requested, landed, confirmed
 
-**The weekly write-up cannot be displayed, and this is the one thing on either surface that
-is not finished.** There is no `synthesis` domain on `DesvuApi`, no `synthesis:*` entry in
-`IPC_CHANNELS`, and no `synthesisRepository` in `src/main/repos/`. `search.query()` reaches
-synthesis notes but returns a ~140-character snippet, not a body. `brainDump.readThread` is
-boundaried to `Brain Dump/`. `window.desvu` is non-writable, non-configurable and frozen, so
-it cannot even be shimmed for a demo — correct posture, and it means there is no route
-around this from the renderer. Both owning files are outside this workstream.
+This report originally blocked here: there was no `synthesis` domain on `DesvuApi`, so the
+renderer had no way to read a week's body. `search.query()` returns a ~140-character snippet,
+`brainDump.readThread` is boundaried to `Brain Dump/`, and `window.desvu` is non-writable,
+non-configurable and frozen — correct posture, and it meant there was genuinely no route
+around it from the renderer, not even a shim for a demo.
 
-Requested addition:
+The orchestrator landed exactly the requested shape: `SynthesisNote { path, week, body }`,
+`synthesis.list()` / `synthesis.read(week)`, and `synthesisRepository` with `read()`
+rejecting anything that is not an ISO week key rather than joining it into a path.
 
-```ts
-// src/shared/ipc.ts
-synthesis: {
-  /** Newest week first. Bodies included — the folder is one small file per week. */
-  list(): Promise<SynthesisNote[]>
-  read(week: string): Promise<SynthesisNote | null>   // "2026-W31"
-}
-// + 'synthesis:list', 'synthesis:read' in IPC_CHANNELS
+**The runtime detection worked with no change from this workstream — confirmed, not
+assumed.** `store/synthesis.ts` probes for the domain rather than assuming it, and the
+preload builds `window.desvu` mechanically from `IPC_CHANNELS`, so the surface switched from
+its unavailable state to the real reader on the first launch after the rebuild:
 
-// src/shared/types.ts
-export interface SynthesisNote { path: string; week: string; body: string }
+```
+domains            [… brainDump, synthesis, inbox …]     ← present
+stillSaysNotWired  false
+cards              ["27 Jul – 2 Aug 2026", "Sources", "Ask", "What agents may read"]
+proseStyle         { font: "Cormorant", size: "19px" }
+frontMatterLeaked  false
 ```
 
-plus a `synthesisRepository` shaped like `brainDumpRepository.listThreads/readThread` over
-`VAULT_SUBDIRS.synthesis`. The preload builds `window.desvu` mechanically from
-`IPC_CHANNELS`, so nothing is needed there.
+One thing worth recording, because it is a seam that could have failed silently:
+**`synthesisRepository` returns the whole file in `body`, front matter included.** The field
+name suggests otherwise. It renders correctly because `parseNote()` strips a leading fence
+tolerantly, and `citedTargets()` goes through the same parser — so `week: 2026-W31` and
+`generated: 2026-08-02` do not leak into the prose. Verified explicitly
+(`frontMatterLeaked: false`) rather than assumed. Nothing needs changing; noting it so the
+next person to touch either side knows the two halves are doing complementary work.
 
-**The surface detects the domain at runtime and lights up the moment it lands** — no change
-needed in `store/synthesis.ts` or `SynthesisSurface.tsx`. Until then it renders *"The weekly
-reader isn't connected yet"* naming exactly what is missing. That state is deliberately
-**not** the empty state: "this week hasn't been written yet" and "the app cannot read the
-folder" are different facts, and conflating them would be a lie the user has no way to
-catch. The empty state exists and is separate — it names
-`Synthesis/2026-W31.md` and reads *"Nothing is missing — it just hasn't run."*
+Also confirmed now that real weeks exist: **`[[2026-W30]]` resolves week-to-week.** Synthesis
+notes are folded into the wikilink index, so a citation from one write-up to an earlier one
+resolves and switches the reader in place — week 31 → week 30, eyebrow, body and Sources card
+all following. This was described as intended behaviour in the first pass and could not be
+exercised then.
 
-Two smaller notes for whoever picks that up: `citedTargets()` and the whole reader are
-already tested against a realistic write-up in `test/synthesis-ui-sources.test.ts`, and
-synthesis notes are folded into the wikilink index when present, so `[[2026-W30]]` resolves
-week-to-week.
+The two states remain distinct, which was the point of building it this way: *"This week
+hasn't been written yet"* (the agent has not run) is not the same fact as *"the weekly reader
+isn't connected"* (the app cannot read the folder), and the second no longer occurs.
 
 ---
 
@@ -296,6 +306,8 @@ would have invented), a Library item, a synthesis note, `settings.json`.
 - **Empty vault** — *"No threads yet."* naming the seeded topics. No count of what is
   missing, no "you haven't".
 - **Both themes** — `rgb(253,250,243)` / `rgb(11,10,8)`.
+- **The synthesis reader** — two weeks listed newest first, write-up in Cormorant, front
+  matter stripped, table rendered, week navigation, Sources recomputing per week.
 
 `braindump-{light,dark}.png` · `braindump-table-light.png` · `braindump-empty-light.png` ·
 `braindump-newthread-dark.png` · `synthesis-{light,dark}.png`
@@ -336,10 +348,44 @@ would have invented), a Library item, a synthesis note, `settings.json`.
 
 ---
 
+## Second pass — after the API and the format fixes landed
+
+Re-verified in the running app, against a seeded vault now holding **two** synthesis weeks so
+week-to-week citation could be exercised for the first time.
+
+- **The write-up renders.** Cormorant 19px, dated header, pipe table in DM Sans, citations
+  inline as gold links, prev/next week navigation. Front matter does not leak.
+- **Sources** lists all seven cited records for week 31 and recomputes to two for week 30.
+- **`[[2026-W30]]`** switches the week in place; **`[[malloc-lab]]`** crosses to Brain dump,
+  selects the thread and opens it in the reader; **`[[…ddia-ch4]]`** offers Obsidian.
+- **Append is byte-identical to `/sort-inbox`**, driven through the real textarea, same md5.
+- `tsc --noEmit` clean, build clean, **421 tests pass**.
+
+### One bug of mine this pass surfaced
+
+**A tooltip was promising the wrong thing.** `<WikiLink>` derived its title from `ref.kind`,
+so a resolved synthesis citation read *"Open Synthesis/2026-W30.md in Obsidian"* while
+clicking it actually read the week in place. Only the surface knows where its own `openNote`
+goes — Synthesis reads a cited week inline, Brain dump hands the same note to Obsidian — so a
+label derived from `kind` alone is wrong on one of them no matter which branch you write.
+
+Fixed by moving the label next to the behaviour: `NoteLinkProvider` now takes
+`describeNote(ref)` alongside `openNote`, defaulting to "open in Obsidian", and each surface
+supplies one that matches its own navigation. Every tooltip was then re-read from the live
+DOM and each matches its click: *"Read Week 30 · 2026"*, *"Open the Malloc lab thread"*,
+*"Open Library/2026-07-28-ddia-ch4.md in Obsidian"*.
+
+### One alignment fix
+
+With a real write-up on screen, the Synthesis surface had two left edges: the write-up column
+was centred inside the band (`mx-auto`) while the Sources, Ask and journal-access cards below
+it were left-aligned. Dropped `mx-auto` from both the write-up and its loading skeleton, so
+the whole surface shares one left edge with the page title (measured: h1 at 260px, card
+content at 289–293px, the 4px spread being the `band` variant's own padding). The band still
+runs full width; only the measure is capped.
+
 ## Left for later
 
-- **The write-up reader**, blocked on the contract addition above. Everything else on the
-  Synthesis surface is done.
 - **`/ask`**, blocked on an agent that does not exist. The surface is honest about it.
 - **Obsidian `aliases:`.** Resolution matches file stems only, faithfully. If threads ever
   grow an `aliases` front-matter key, `buildNoteIndex` should index those too — it is one
