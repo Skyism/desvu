@@ -37,14 +37,36 @@ function findChild(parent: string, name: string): string | null {
   return null
 }
 
-function isVault(candidate: string | null): candidate is string {
+/**
+ * Files that identify a directory as *the* vault rather than something vault-shaped.
+ *
+ * `data/` alone is not enough. Any seeder or half-finished script that creates
+ * `<somewhere>/data/todos.json` would satisfy that test, and if the somewhere happens to
+ * sit earlier in the search order it silently shadows the real corpus — the app then
+ * reads an empty vault while six months of journal entries sit untouched somewhere else.
+ * That happened once during development, which is why this check exists.
+ *
+ * `PRD.md` is the right marker precisely because nothing writes it programmatically.
+ */
+const VAULT_MARKERS = ['PRD.md', path.join('data', 'SCHEMAS.md')] as const
+
+function isDirectory(candidate: string | null): candidate is string {
   if (!candidate) return false
   try {
-    // A real vault has the data directory the schemas describe.
-    return statSync(candidate).isDirectory() && existsSync(path.join(candidate, 'data'))
+    return statSync(candidate).isDirectory()
   } catch {
     return false
   }
+}
+
+/**
+ * Strict check, used only when *discovering* a vault by convention. An explicitly
+ * configured path is trusted without markers — that is what makes temp vaults in tests
+ * work, and an explicit path cannot be shadowed by accident.
+ */
+function isDiscoverableVault(candidate: string | null): candidate is string {
+  if (!isDirectory(candidate)) return false
+  return VAULT_MARKERS.some((marker) => existsSync(path.join(candidate, marker)))
 }
 
 let cached: string | null = null
@@ -66,10 +88,8 @@ export function resolveVaultPath(): string {
     const expanded = fromEnv.startsWith('~')
       ? path.join(homedir(), fromEnv.slice(1))
       : fromEnv
-    if (!isVault(expanded)) {
-      throw new Error(
-        `DESVU_VAULT is set to "${expanded}" but that is not a vault (no data/ directory).`
-      )
+    if (!isDirectory(expanded)) {
+      throw new Error(`DESVU_VAULT is set to "${expanded}" but that is not a directory.`)
     }
     cached = expanded
     return cached
@@ -81,10 +101,21 @@ export function resolveVaultPath(): string {
   ]
 
   for (const candidate of candidates) {
-    if (isVault(candidate)) {
+    if (isDiscoverableVault(candidate)) {
       cached = candidate
       return cached
     }
+  }
+
+  // Name the near-miss. "Vault not found" while a directory of exactly that name sits in
+  // ~/Documents is the kind of error people stare at for twenty minutes.
+  const impostor = candidates.find(isDirectory)
+  if (impostor) {
+    throw new Error(
+      `Found "${impostor}" but it is not the vault — none of ${VAULT_MARKERS.join(' or ')} ` +
+        `is present, so it is probably a stray directory shadowing the real one. Move or ` +
+        `delete it, or set DESVU_VAULT explicitly.`
+    )
   }
 
   throw new Error(
