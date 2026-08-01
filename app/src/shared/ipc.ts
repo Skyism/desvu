@@ -31,7 +31,13 @@ import type {
  */
 export interface DesvuApi {
   todos: {
+    /** Excludes recurrence templates — they are not tasks. See `listTemplates`. */
     list(): Promise<Todo[]>
+    /**
+     * The recurrence templates themselves. Without this nothing can hand the UI a
+     * template id, which would leave recurring tasks uneditable and undeletable.
+     */
+    listTemplates(): Promise<Todo[]>
     /** Open + doing todos relevant to `date`, recurrence instances materialized. */
     forDate(date: DateString): Promise<Todo[]>
     create(input: CreateTodoInput): Promise<Todo>
@@ -146,6 +152,7 @@ export type DeepPartial<T> = {
 /** Every channel the preload is allowed to invoke. Keep sorted; the test asserts parity. */
 export const IPC_CHANNELS = [
   'todos:list',
+  'todos:listTemplates',
   'todos:forDate',
   'todos:create',
   'todos:update',

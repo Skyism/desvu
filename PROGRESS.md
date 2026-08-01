@@ -97,9 +97,9 @@ Stages are from PRD §10.
 | # | Stage | Status |
 |---|---|---|
 | 1 | Vault, schemas, git init | ✅ done |
-| 2 | Storage layer (repositories + mutation lock) | ⏳ wave 1 |
-| 3 | Telegram bot + `/sort-inbox` | ⏳ wave 1 |
-| 4 | Design system → tokens, fonts, primitives | ⏳ wave 1 |
+| 2 | Storage layer (repositories + mutation lock) | ✅ 12 repos, 136 tests |
+| 3 | Telegram bot ✅ (67 tests) + `/sort-inbox` ✅ | done |
+| 4 | Design system → tokens, fonts ✅, primitives | ⏳ wave 1 |
 | 5 | Electron shell + dashboard frame | ⏳ wave 1 |
 | 6 | To-do list + Today view + recurrence | ⬜ wave 2 |
 | 7 | Journal migration ✅ / reflection form ⬜ | migration done — 83/83 lossless |
@@ -164,6 +164,26 @@ Security boundaries, both structural rather than conventional:
 - **C7** is an **allowlist** of writable subdirs (`Inbox/`, `Attachments/`), enforced on
   the write path with traversal checks — not a denylist of `Journal/`. A denylist would
   let a future handler quietly acquire a new write target.
+
+### The vault has multiple writers — take the lock
+
+Four processes write to this vault: the Electron app, the Telegram bot, the `/sort-inbox`
+Python scripts, and Obsidian itself. The app's in-process mutation lock cannot see the
+other three, and every JSON tracker is read-modify-written whole, so an unlocked write
+silently loses records.
+
+**`docs/lockfile-protocol.md` is normative.** Any process writing `data/*.json`, `Inbox/`
+or `Attachments/` must take `data/.desvu.lock` per that spec: `O_CREAT|O_EXCL`, holder
+metadata, steal only when >30s old AND pid dead AND same host, ~10s bounded wait, release
+in a `finally`. It is same-machine only — iCloud gives `O_EXCL` no cross-device meaning,
+which is fine because all writers are on this Mac.
+
+A lock failure must **never** silently drop a capture. Fail loudly and tell the user to
+resend; a visible error beats a lost note.
+
+Obsidian is the exception — it writes markdown notes, not trackers, and cannot be made to
+take a lock. Markdown records are single-file writes, so the exposure is limited to a
+concurrent edit of the same note.
 
 ## Conventions
 
