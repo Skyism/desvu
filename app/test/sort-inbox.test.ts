@@ -60,6 +60,46 @@ describe('the counts cannot be faked by the model', () => {
   })
 })
 
+describe('the degraded warning only fires on real evidence', () => {
+  /**
+   * Mirrors the rule in `sortInboxRepository`. Verified against a real run: the sorter
+   * filed all three captures correctly while the CLI reported three permission denials —
+   * the agent had tried a tool, been refused, and got the same information another way.
+   * Warning on that would fire on every successful run and train the user to ignore it.
+   */
+  function degradedFor({
+    failed,
+    denials,
+    leftUnsorted,
+  }: {
+    failed: string | null
+    denials: number
+    leftUnsorted: number
+  }): string | null {
+    if (failed) return failed
+    if (denials > 0 && leftUnsorted > 0) return 'refused tools may explain the leftovers'
+    return null
+  }
+
+  it('stays quiet when denials happened but everything was still filed', () => {
+    expect(degradedFor({ failed: null, denials: 3, leftUnsorted: 0 })).toBeNull()
+  })
+
+  it('speaks up when captures were left behind and tools were refused', () => {
+    expect(degradedFor({ failed: null, denials: 3, leftUnsorted: 2 })).not.toBeNull()
+  })
+
+  it('always speaks up when the run itself failed', () => {
+    expect(degradedFor({ failed: 'the CLI exited', denials: 0, leftUnsorted: 0 })).toBe(
+      'the CLI exited'
+    )
+  })
+
+  it('stays quiet on a clean run', () => {
+    expect(degradedFor({ failed: null, denials: 0, leftUnsorted: 0 })).toBeNull()
+  })
+})
+
 describe('permission scope', () => {
   /**
    * Code only. The file explains in prose *why* it does not use the bypass flag, and a

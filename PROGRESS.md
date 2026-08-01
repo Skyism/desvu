@@ -239,16 +239,31 @@ worst case is a line waits in the Inbox. That trade is the whole point.
 `/sort-inbox` scans **every** `Inbox/*.md`, not just today's, because Telegram stamps send
 time — see the bot section above.
 
-**In-app button:** the app can shell out to `claude -p "/sort-inbox"` to run the same skill
-from a button. Two things a naive implementation gets wrong:
+**In-app button:** ✅ built. `GlobalControls` → `SortInboxControl`, beside the inbox pill.
+Verified end to end in a running app: 3 captures in → 4 records out (a lunch line fanned
+out to both `finance.json` and `meals.json`), 0 left unsorted, every line marked `- [x]`
+with a `<!-- sorted → destination -->` comment. Took 175s. The control hides itself when
+the inbox is clear.
+
+Three things a naive implementation gets wrong:
 
 - Headless has no permission prompt, so tools must be passed explicitly via `--allowedTools`
   scoped to what `.claude/commands/sort-inbox.md` declares. Without it the run *appears* to
   succeed while every `python3` call is silently denied and nothing is actually scanned.
   **Never** reach for `--dangerously-skip-permissions` — that hands a background process
   unrestricted tool access to the machine.
-- A run takes **~2 minutes even on an empty inbox**. It needs streaming progress and a
-  cancel, not a spinner, and a partial run must say so rather than showing a green check.
+- A run takes **~2 minutes even on an empty inbox** (~$0.69 in tokens). It needs streaming
+  progress and a cancel, not a spinner.
+- **A permission denial is not evidence of a partial run.** The agent routinely tries a
+  tool, is refused, and gets the same information an allowed way — the first real run
+  filed all three captures correctly while reporting three denials. Warning on that fires
+  on every successful run and trains the user to ignore the warning, which costs more than
+  it saves. Degradation is reported only when the run failed, or when captures were left
+  behind *and* tools were refused.
+
+Counts shown to the user (`filed`, `needsYou`) are derived by counting unsorted Inbox lines
+before and after — never parsed from the agent's summary. A model that says it filed five
+things cannot make that true, and these are numbers the user acts on.
 
 ## Conventions
 

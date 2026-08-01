@@ -193,12 +193,18 @@ export function createSortInboxRepository(onProgress: (p: SortInboxProgress) => 
       // five things cannot make that true, and this is a number the user acts on.
       const filed = Math.max(0, before - after)
 
+      // A denial on its own is not evidence of a partial run. The agent routinely tries a
+      // tool, is refused, and gets the same information an allowed way — a real run filed
+      // all three captures correctly while reporting three denials. Warning on that teaches
+      // the user to ignore the warning, which costs more than it saves. So degradation
+      // requires actual evidence: the run failed, or captures were left behind *and* tools
+      // were refused, which is when a denial plausibly explains the leftovers.
       const degraded: string[] = []
       if (result.failed) degraded.push(result.failed)
-      if (result.denials > 0) {
+      else if (result.denials > 0 && after > 0) {
         degraded.push(
-          `${result.denials} tool call${result.denials === 1 ? ' was' : 's were'} denied, so ` +
-            `some captures may not have been examined.`
+          `${result.denials} tool call${result.denials === 1 ? ' was' : 's were'} refused, ` +
+            `which may be why ${after === 1 ? 'one capture is' : `${after} captures are`} still unsorted.`
         )
       }
 
