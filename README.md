@@ -39,9 +39,10 @@ Text the Telegram bot and it lands in `Inbox/YYYY-MM-DD.md` within a second:
 
 - **Works while the machine is asleep.** Telegram queues updates for 24 hours and delivers
   them when the bot reconnects. No webhook, no public endpoint, no tunnel.
-- **Voice notes** are saved to `Attachments/` and transcribed when a local transcriber is
-  installed; otherwise marked `[voice, untranscribed]` rather than silently dropped.
-- **Photos** are saved and OCR'd, with the extracted text on the line.
+- **Voice notes** are saved to `Attachments/` and transcribed locally via `whisper.cpp`. No
+  cloud transcription API is used. Without a transcriber installed they are marked
+  `[voice, untranscribed]` rather than silently dropped.
+- **Photos** are saved and OCR'd locally via `tesseract`, with the extracted text on the line.
 - **Desktop quick capture** (`⌘⇧Space`) writes the identical format.
 - **Locked to one Telegram user id.** Anyone else gets no reply, no write, and a redacted
   log line.
@@ -213,6 +214,59 @@ npm run dev --prefix app
 ```bash
 npm start --prefix bot
 ```
+
+### Always-on capture
+
+Capture is only useful if it is always listening, so the bot ships as a macOS LaunchAgent —
+it starts at login, restarts if it crashes, and logs to `~/Library/Logs/desvu-bot.log` with
+the token redacted on every line. The plist contains **no credentials**; the bot reads
+`~/.config/desvu/bot.env` itself.
+
+```bash
+cp bot/launchd/com.desvu.bot.plist ~/Library/LaunchAgents/
+```
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.desvu.bot.plist
+```
+
+```bash
+launchctl kickstart -p gui/$(id -u)/com.desvu.bot
+```
+
+Check it, restart it after changing credentials, or remove it:
+
+```bash
+launchctl print gui/$(id -u)/com.desvu.bot | grep -E "state|pid"
+```
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.desvu.bot
+```
+
+```bash
+launchctl bootout gui/$(id -u)/com.desvu.bot
+```
+
+Two things about the plist that are easy to get wrong:
+
+- **It injects `/opt/homebrew/bin` into `PATH`.** launchd hands out a bare `PATH`, which
+  hides the Homebrew tools the bot probes for at startup. Without this, OCR and voice
+  transcription silently degrade to `[photo, no-ocr]` and `[voice, untranscribed]` even
+  though `tesseract` and `whisper-cli` are installed — the bot keeps working and the
+  captures keep landing, so nothing looks broken.
+- **It runs Homebrew's node, not nvm's.** nvm paths are pinned to a version directory and
+  break on the next upgrade; the Homebrew symlink survives.
+
+Startup logs what it can actually do, so a degraded capability is visible immediately:
+
+```
+capabilities · transcription: whisper.cpp · ocr: tesseract
+connected as @yourbot (id …) — long polling
+```
+
+Only one instance may poll at a time — a second one fights the first over `getUpdates`.
+Stop any foreground `npm start` before bootstrapping the agent.
 
 The vault is found via `DESVU_VAULT`, then `~/Documents/Dès vu`, then the iCloud Obsidian
 container. Discovery requires a marker file (`PRD.md` or `data/SCHEMAS.md`) so a stray
