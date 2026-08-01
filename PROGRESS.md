@@ -102,13 +102,68 @@ Stages are from PRD §10.
 | 4 | Design system → tokens, fonts, primitives | ⏳ wave 1 |
 | 5 | Electron shell + dashboard frame | ⏳ wave 1 |
 | 6 | To-do list + Today view + recurrence | ⬜ wave 2 |
-| 7 | Journal migration + reflection form | ⏳ wave 1 (migration) / wave 2 (form) |
+| 7 | Journal migration ✅ / reflection form ⬜ | migration done — 83/83 lossless |
 | 8 | Finance · meals · workouts | ⬜ wave 2 |
 | 9 | Calendar · Gmail | ⬜ deferred (needs isolated MCP config) |
 | 10 | Explore library | ⬜ wave 2 |
 | 11 | Search across everything | ⬜ wave 2 |
 | 12 | Brain dump threads · synthesis · `/ask` | ⬜ wave 2 |
 | 13 | Always-on shakedown | ⬜ |
+
+## Facts established by measurement — do not re-derive, do not contradict
+
+### The journal corpus (verified against the real data, 2026-08-01)
+
+83 entries now live in `data/journal.json`, migrated losslessly from `gratefulnessjar`.
+Every figure the PRD rests on was checked and **all of them held**: 211 days spanned,
+83 with entries, **39.3% adherence**, **24-day longest gap** (Jul 4 → Jul 28), decay from
+**100% in January to 13.8% in July**. Rating distribution `{1:2, 2:3, 3:10, 4:28, 5:32,
+6:7, 7:1}` — exactly **8 entries above 5**, which is why the scale is 1–7 and why clamping
+to 1–5 would have silently flattened the top of every chart.
+
+Three properties of this data constrain any code that touches it:
+
+1. **Key on `entry_date`, never `created_at`.** On 50 of 83 entries `created_at` post-dates
+   `entry_date` by up to 6 days — days were often written up retroactively. Charts, streaks
+   and calendars keyed on `created_at` would misplace ~60% of the corpus.
+2. **Editing an existing day is a normal path, not an edge case.** 16 entries were revised
+   after creation. The reflection form must open an existing entry for editing as
+   naturally as it creates a new one.
+3. **Three entries contain non-BMP emoji.** Any preview truncation must slice by code
+   point (`[...str]`), not by UTF-16 index, or it will emit a lone surrogate.
+
+### What the capture bot actually writes (verified, 2026-08-01)
+
+Line format in `Inbox/YYYY-MM-DD.md`:
+```
+- [ ] 14:32 · telegram · the raw text exactly as sent
+```
+Attachment lines end ` → [[Attachments/<filename>]]`.
+
+Four properties anything reading the Inbox must respect:
+
+1. **Timestamps are SEND time, not receipt time.** Telegram queues updates for 24h, so a
+   message sent at 11:40pm with the laptop asleep is filed into **that** day's file
+   whenever the laptop wakes. A day-file is therefore **not complete or immutable once
+   the day passes**, and lines within it are **not guaranteed chronological**. This is
+   correct — it preserves when the user had the thought — but `/sort-inbox` must re-scan
+   recent day-files, not just today's.
+2. **Newlines fold to a single space.** The only normalization applied. One Inbox line may
+   represent what was visually several lines or a list.
+3. **Photo OCR works** (tesseract 5.5.1) — real extracted text lands on the line.
+4. **Voice transcription does not.** No whisper is installed, and no cloud API was added by
+   decision. Voice notes land as `[voice, untranscribed]` plus a wikilink. Enable with
+   `brew install whisper-cpp` and a `ggml-*.bin` model in `~/.cache/whisper.cpp` — no code
+   change needed. (macOS Vision OCR was tried first and returns zero observations on
+   macOS 26.5.2, so tesseract is the supported path.)
+
+Security boundaries, both structural rather than conventional:
+- **C2** is grammY middleware installed before every handler — a rejected update never
+  calls `next()`, so no route can bypass it. Verified: a foreign id produces zero API
+  calls and zero file writes.
+- **C7** is an **allowlist** of writable subdirs (`Inbox/`, `Attachments/`), enforced on
+  the write path with traversal checks — not a denylist of `Journal/`. A denylist would
+  let a future handler quietly acquire a new write target.
 
 ## Conventions
 

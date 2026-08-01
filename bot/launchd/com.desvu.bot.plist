@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Dès vu capture bot — LaunchAgent (C4: restarts on crash and on login).
+
+  This file contains NO credentials. The bot reads ~/.config/desvu/bot.env itself.
+  Never add TELEGRAM_BOT_TOKEN here: this plist lives in the git repo.
+
+  Install (run these yourself; the bot does not install itself):
+    cp ~/Desktop/Vscode/desvu/bot/launchd/com.desvu.bot.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.desvu.bot.plist
+    launchctl enable gui/$(id -u)/com.desvu.bot
+    launchctl kickstart -p gui/$(id -u)/com.desvu.bot
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.desvu.bot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/jeffreyshen/Desktop/Vscode/desvu/bot/src/index.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jeffreyshen/Desktop/Vscode/desvu/bot</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Do not hammer Telegram if the process is crash-looping. -->
+    <key>ThrottleInterval</key>
+    <integer>20</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!--
+          launchd hands out a bare PATH, which would hide the Homebrew tools the bot
+          probes for. Without /opt/homebrew/bin, OCR silently degrades to [photo, no-ocr]
+          even though tesseract is installed.
+        -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jeffreyshen/Library/Logs/desvu-bot.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jeffreyshen/Library/Logs/desvu-bot.log</string>
+</dict>
+</plist>
