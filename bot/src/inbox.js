@@ -11,6 +11,7 @@
 import { appendFile, mkdir, open } from 'node:fs/promises'
 import path from 'node:path'
 import { assertCapturePath, resolveVaultPath, VAULT_SUBDIRS } from './vault.js'
+import { withVaultLock } from './vault-lock.js'
 
 /** Middle dot with surrounding spaces. Matches the app's parser. */
 export const FIELD_SEP = ' · '
@@ -98,25 +99,36 @@ async function ensureDayFile(file, date) {
 /**
  * Append one already-formatted line to the day file.
  *
- * The append is a single O_APPEND write of one complete line, which is what keeps
- * concurrent writers (bot + desktop quick capture, C8) from interleaving mid-line.
+ * Two independent guarantees, and both are needed:
+ *
+ *  - The append itself is a single O_APPEND write of one complete line, so concurrent
+ *    appenders can never interleave mid-line.
+ *  - The cross-process vault lock is held around it, because the app and `/sort-inbox`
+ *    read-modify-*rewrite* this same file. An atomic append is no defence against another
+ *    process reading the file, and writing its version back over ours.
  *
  * @returns {Promise<{file: string, created: boolean}>}
  */
-export async function appendInboxLine(line, { at = new Date(), root } = {}) {
+export async function appendInboxLine(line, { at = new Date(), root, lock = {} } = {}) {
   const vaultRoot = root ?? resolveVaultPath()
   const file = inboxFilePath(at, vaultRoot)
   assertCapturePath(file, vaultRoot)
-  const created = await ensureDayFile(file, at)
-  await appendFile(file, `${line}\n`, { encoding: 'utf8', flag: 'a' })
-  return { file, created }
+
+  return withVaultLock(
+    async () => {
+      const created = await ensureDayFile(file, at)
+      await appendFile(file, `${line}\n`, { encoding: 'utf8', flag: 'a' })
+      return { file, created }
+    },
+    { root: vaultRoot, ...lock }
+  )
 }
 
 /**
  * Format and append in one step. Returns the line that was written.
  */
-export async function captureToInbox({ text, at = new Date(), source = 'telegram', attachment = null, root }) {
+export async function captureToInbox({ text, at = new Date(), source = 'telegram', attachment = null, root, lock }) {
   const line = formatInboxLine({ text, at, source, attachment })
-  const result = await appendInboxLine(line, { at, root })
+  const result = await appendInboxLine(line, { at, root, lock })
   return { line, ...result }
 }

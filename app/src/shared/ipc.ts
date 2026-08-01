@@ -221,4 +221,9 @@ export type IpcChannel = (typeof IPC_CHANNELS)[number]
 export const IPC_EVENTS = {
   /** A vault file changed on disk — from Obsidian, the bot, or a refresh script. */
   vaultChanged: 'event:vault-changed',
+  /**
+   * The global accelerator fired (PRD C8). Main owns the shortcut because it must work
+   * when the window is unfocused, so opening the capture field has to be pushed.
+   */
+  quickCapture: 'event:quick-capture',
 } as const

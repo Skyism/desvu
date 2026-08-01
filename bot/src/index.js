@@ -16,6 +16,7 @@ import { captureToInbox } from './inbox.js'
 import { log, redact, registerSecret } from './log.js'
 import { attachmentName, downloadAttachment } from './media.js'
 import { resolveVaultPath } from './vault.js'
+import { VaultLockError } from './vault-lock.js'
 import { whitelist } from './whitelist.js'
 
 const HELP = [
@@ -29,7 +30,17 @@ const HELP = [
 const sentAt = (ctx) =>
   ctx.message?.date ? new Date(ctx.message.date * 1000) : new Date()
 
-function vaultUnavailableReply(err) {
+/**
+ * A capture that did not land must say so plainly. Losing a note silently is far worse
+ * than an ugly message — the user's copy is still in this chat, and they can resend.
+ */
+function notSavedReply(err) {
+  if (err instanceof VaultLockError) {
+    return (
+      '⚠︎ NOT saved — another Dès vu process (the app or /sort-inbox) is writing to the ' +
+      'vault and did not release the lock in time. Nothing was written. Please send it again.'
+    )
+  }
   return `⚠︎ not saved — the vault is unreachable (${err.message.split('\n')[0]}). Your message is still in this chat; resend once it is back.`
 }
 
@@ -42,7 +53,7 @@ async function capture(ctx, { text, attachment = null, kind = 'text' }) {
     return { ok: true }
   } catch (err) {
     log.error('capture failed:', err)
-    await ctx.reply(vaultUnavailableReply(err)).catch((e) => log.error('reply failed:', e))
+    await ctx.reply(notSavedReply(err)).catch((e) => log.error('reply failed:', e))
     return { ok: false, err }
   }
 }
@@ -69,6 +80,13 @@ async function captureMedia(ctx, { kind, fileId, uniqueId, originalName, caption
     saved = await downloadAttachment({ token, filePath: file.file_path, name })
     log.info(`saved attachment ${name} (${saved.bytes} bytes)`)
   } catch (err) {
+    if (err instanceof VaultLockError) {
+      // Not a download problem — the vault is locked. Say that, rather than filing a line
+      // that blames the network for something that never reached the disk.
+      log.error(`attachment write blocked by the vault lock (${kind}):`, err)
+      await ctx.reply(notSavedReply(err)).catch((e) => log.error('reply failed:', e))
+      return
+    }
     log.error(`attachment download failed (${kind}):`, err)
     const fallback = [caption, `[${kind}, download-failed]`].filter(Boolean).join(' ')
     const res = await capture(ctx, { text: fallback, kind })

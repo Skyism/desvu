@@ -15,11 +15,12 @@ bot/
     config.js      ~/.config/desvu/bot.env loader + C2 hard-fail validation
     whitelist.js   C2 middleware, isolated so it can be tested directly
     vault.js       vault resolution (port of app/src/shared/vault.ts) + C7 write guard
-    inbox.js       the line format, day-file creation, atomic append
+    vault-lock.js  cross-process advisory lock, per docs/lockfile-protocol.md
+    inbox.js       the line format, day-file creation, locked atomic append
     media.js       attachment naming + download
     enrich.js      local-only transcription (C9) and OCR (C10) probing
     log.js         logger with a token redactor in front of it
-  test/            67 tests, node --test
+  test/            82 tests, node --test
   launchd/com.desvu.bot.plist   written, NOT installed
 ```
 
@@ -30,7 +31,7 @@ Zero new dependencies. `grammy` is still the only one.
 ```bash
 cd ~/Desktop/Vscode/desvu/bot
 npm start            # node src/index.js
-npm test             # node --test  (67 tests)
+npm test             # node --test test/*.test.js  (82 tests)
 ```
 
 Credentials are read from `~/.config/desvu/bot.env` at startup. Nothing else is needed —
@@ -90,6 +91,52 @@ Three decisions inside this contract that `/sort-inbox` and the app's quick capt
 3. **Attachment filenames** are `YYYY-MM-DD-HHMMSS-<kind>-<file_unique_id>[-<label>]<ext>` —
    sortable, collision-resistant, and sanitized of everything that would break a wikilink
    (`/ \ : * ? " < > | [ ] # ^`, whitespace, leading/trailing dots).
+
+## Cross-process vault lock
+
+`src/vault-lock.js` implements `docs/lockfile-protocol.md` with `holder: "bot"`. It is a
+reimplementation, not an import — the packages share no build — so the constants are duplicated
+deliberately: `data/.desvu.lock`, 30 000 ms staleness, 10 000 ms timeout, backoff 15 ms → ×1.6 →
+250 ms cap with jitter. A test asserts those four values, so a drift in one package shows up here.
+
+Held for:
+
+- **`Inbox/YYYY-MM-DD.md` appends.** This is the one that mattered: the bot was the last writer
+  not taking it. The single `O_APPEND` write is *still* there and is still what stops two
+  appenders interleaving mid-line — the lock is the orthogonal guarantee, excluding the app's and
+  `/sort-inbox`'s read-modify-*rewrite* of the whole file. An atomic append is no defence against
+  another process reading the file and writing its version back over yours.
+- **`Attachments/` writes**, for consistency as asked. The network download stays **outside** the
+  lock on purpose — a slow 20 MB file would otherwise hold a 10 s-timeout lock long enough to
+  block the app, and could age past the staleness window while legitimately held. Only the
+  `writeFile` is serialized.
+
+Two implementation notes:
+
+- **In-process queue.** `withVaultLock` serializes the bot's own callers before they touch the
+  lock file, same role as the app's `withFileLock`. Without it, two concurrent captures would
+  burn their 10 s timeouts against each other instead of queueing. Consequence worth knowing: if
+  a foreign process holds the lock, captures queue, so the second one's clock starts after the
+  first gives up.
+- **The lock file lives in `data/`, which the C7 capture guard refuses.** That is correct — a
+  lock file is not a capture — and it is not a hole: `vaultLockPath()` is a fixed path computed
+  from the vault root, never derived from message content. A test asserts `data/` is empty of
+  everything but the transient lock after an append.
+
+**A lock failure never silently drops a capture.** `VaultLockError` is a distinct class, and the
+Telegram reply says so plainly rather than reusing the vault-unreachable wording:
+
+> ⚠︎ NOT saved — another Dès vu process (the app or /sort-inbox) is writing to the vault and did
+> not release the lock in time. Nothing was written. Please send it again.
+
+The media path checks for it specifically: a lock failure while writing an attachment replies with
+that message instead of filing a `[voice, download-failed]` line, which would blame the network for
+something that never reached the disk.
+
+One edge case, stated rather than hidden: the attachment write and the Inbox append take the lock
+**separately**. If the attachment lands and the append then times out, an orphaned file sits in
+`Attachments/` with no line referencing it, and the user is told to resend. Losing the note is the
+worse outcome, so that is the trade taken; the orphan is inert and `/sort-inbox` will never see it.
 
 ## Requirements
 
@@ -157,9 +204,9 @@ silently returns nothing, OCR uses tesseract, which was tested and does work.
 
 ## Verified
 
-Run `npm test` in `bot/` — 67 tests, all passing, all against a temp vault under `os.tmpdir()`
+Run `npm test` in `bot/` — **82 tests, all passing**, all against a temp vault under `os.tmpdir()`
 pointed at by `DESVU_VAULT`. **The real vault was never written to by the suite** (confirmed:
-`Inbox/` and `Attachments/` are still empty).
+`Inbox/`, `Attachments/` and `data/` are unchanged, with no stray lock file).
 
 - **Real Telegram API.** `getMe` → `@skyismdesvu_bot` (id 8789118790), `is_bot: true`.
   `getWebhookInfo` → no webhook URL set, so long polling is unobstructed.
@@ -190,6 +237,22 @@ pointed at by `DESVU_VAULT`. **The real vault was never written to by the suite*
   caption) and tells the user. An unreachable vault replies *"not saved … still in this chat"*
   instead of dropping silently. A `sendMessage` that throws mid-handler does not escape `bot.catch`,
   and the capture still lands.
+- **The vault lock (15 dedicated tests).** Contention is tested against a **real child process**
+  running `test/helpers/foreign-lock-holder.mjs` — a deliberately independent implementation of the
+  protocol, so what is proven is that the document is reimplementable, not that our code can talk to
+  itself. Verified: the bot waits for a foreign holder and **neither line is lost** (the helper holds
+  the lock *before* its read-modify-write, which is exactly the window an unlocked appender gets
+  clobbered in); a foreign writer waits for us; the lock is created in `data/`, carries
+  `{pid, host, acquired_at, holder: "bot"}` while held, and is removed after; a throw inside the
+  operation does not strand it; 25 concurrent appends leave no lock behind and lose no line.
+  Stealing: a dead pid past the window is stolen **and logged loudly**; a truncated lock file is
+  stolen on mtime; a **live** pid is never stolen from, however old, and fails with an error naming
+  the holder and the lock path; `EPERM` (a root-owned pid) counts as alive; another machine's lock
+  is never stolen; a *fresh* lock with a dead pid is waited out rather than stolen. Release:
+  a lock taken over while we held it is left in place, not deleted.
+- **Lock failure reaches the user.** With a live foreign holder in place, a Telegram text message
+  produced exactly one reply, matching `/NOT saved/` and `/send it again/`, not starting with `✓`,
+  with **no day file created** and the holder's lock untouched.
 - **Secret hygiene.** Grepped the actual token value across the whole repo, the whole vault, and
   the live log: absent from all three. `describeConfig` and the invalid-token error path are
   tested to never echo it, and `redact()` scrubs both registered secrets and anything
@@ -222,6 +285,12 @@ pointed at by `DESVU_VAULT`. **The real vault was never written to by the suite*
 - `DESVU_TELEGRAM_API_ROOT` overrides the file-download host. It exists for the test server, and
   would also let the bot use a self-hosted Bot API server later (which would lift the 20 MB
   `getFile` limit — currently a large voice note or video will hit the download-failed path).
-- Nothing is committed. `bot/package.json` has one change: the `test` script is now `node --test`
-  (`node --test test/` fails on Node 23 — it tries to `require` the directory).
+- `bot/package.json`'s `test` script is now `node --test test/*.test.js`. Two Node 23 gotchas behind
+  that: `node --test test/` fails outright (it tries to `require` the directory), and bare
+  `node --test` collects **every** `.js`/`.mjs` under `test/` — including `test/helpers/`, which
+  meant the spawned foreign-lock helper was being executed as a test file. The explicit glob fixes
+  both; the helper also no-ops when run with no arguments, so bare `node --test` stays green too.
+- The lock's in-process queue is global to the bot. If `/sort-inbox` holds the vault lock for a
+  long time, captures queue behind each other rather than each waiting in parallel. Fine at one
+  writer sending a handful of messages; worth remembering if the bot ever gains a bulk path.
 - The bot is not running right now. Start it with `npm start`, or install the LaunchAgent above.

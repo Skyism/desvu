@@ -3,6 +3,7 @@
  * transformer standing in for the Telegram API. No network, no real vault.
  */
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -136,6 +137,56 @@ describe('bot wiring', () => {
     } finally {
       process.env.DESVU_VAULT = previous
       clearVaultPathCache()
+    }
+  })
+
+  test('a lock timeout tells the user the capture did NOT land', async () => {
+    const { hostname } = await import('node:os')
+    const { writeFile, rm, mkdir } = await import('node:fs/promises')
+    const { configureVaultLock, resetVaultLockConfig, vaultLockPath } = await import(
+      '../src/vault-lock.js'
+    )
+
+    // A live pid on this host: never stealable, however old.
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+      stdio: 'ignore',
+    })
+    const lock = vaultLockPath(vault.root)
+    await mkdir(path.dirname(lock), { recursive: true })
+    await writeFile(
+      lock,
+      JSON.stringify({
+        pid: child.pid,
+        host: hostname(),
+        acquired_at: Date.now() - 10 * 60_000,
+        holder: 'sort-inbox',
+      }),
+      'utf8'
+    )
+    configureVaultLock({ timeoutMs: 300 })
+
+    try {
+      const { bot, calls } = makeBot()
+      const date = Math.floor(new Date(2026, 7, 14, 9, 0, 0).getTime() / 1000)
+      await bot.handleUpdate(
+        textUpdate({ userId: ALLOWED, text: 'must not vanish', updateId: 18, date })
+      )
+
+      const sends = calls.filter((c) => c.method === 'sendMessage')
+      assert.equal(sends.length, 1, 'the user must be told something')
+      const reply = sends[0].payload.text
+      assert.match(reply, /NOT saved/)
+      assert.match(reply, /send it again/i)
+      assert.ok(!reply.startsWith('✓'), `must not look like success: ${reply}`)
+
+      // Nothing was written, and the live holder's lock is untouched.
+      assert.equal(existsSync(path.join(vault.root, 'Inbox', '2026-08-14.md')), false)
+      assert.equal(existsSync(lock), true)
+    } finally {
+      resetVaultLockConfig()
+      child.kill()
+      await new Promise((resolve) => child.on('exit', resolve))
+      await rm(lock, { force: true })
     }
   })
 

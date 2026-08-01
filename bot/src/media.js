@@ -7,6 +7,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { assertCapturePath, resolveVaultPath, VAULT_SUBDIRS } from './vault.js'
+import { withVaultLock } from './vault-lock.js'
 
 const EXT_BY_KIND = {
   voice: '.ogg',
@@ -75,6 +76,7 @@ export async function downloadAttachment({
   root,
   timeout = 120_000,
   apiRoot = process.env.DESVU_TELEGRAM_API_ROOT || DEFAULT_API_ROOT,
+  lock = {},
 }) {
   const vaultRoot = root ?? resolveVaultPath()
   const dir = path.join(vaultRoot, VAULT_SUBDIRS.attachments)
@@ -96,7 +98,15 @@ export async function downloadAttachment({
     clearTimeout(timer)
   }
 
-  await mkdir(dir, { recursive: true })
-  await writeFile(dest, bytes)
+  // The download stays *outside* the lock on purpose: a slow file would otherwise hold a
+  // 10s-timeout lock long enough to block the app and the sort skill, and could even age
+  // past the staleness window while legitimately held. Only the write is serialized.
+  await withVaultLock(
+    async () => {
+      await mkdir(dir, { recursive: true })
+      await writeFile(dest, bytes)
+    },
+    { root: vaultRoot, ...lock }
+  )
   return { name, path: dest, bytes: bytes.length }
 }
