@@ -104,7 +104,7 @@ Stages are from PRD §10.
 | 6 | To-do list + Today view + recurrence | ⏳ wave 2 |
 | 7 | Journal migration ✅ / reflection form ⏳ | migration 83/83 lossless |
 | 8 | Finance · meals · workouts | ⏳ wave 2 |
-| 9 | Calendar · Gmail | ⬜ deferred (needs isolated MCP config) |
+| 9 | Calendar ✅ · Gmail ⬜ | Google OAuth; needs your Cloud project |
 | 10 | Explore library | ⏳ wave 2 |
 | 11 | Search across everything | ⏳ wave 2 |
 | 12 | Brain dump threads · synthesis · `/ask` | ⏳ wave 2 |
@@ -264,6 +264,29 @@ Three things a naive implementation gets wrong:
 Counts shown to the user (`filed`, `needsYou`) are derived by counting unsorted Inbox lines
 before and after — never parsed from the agent's summary. A model that says it filed five
 things cannot make that true, and these are numbers the user acts on.
+
+### Google Calendar
+
+Connected via the **Calendar API with OAuth**, not an MCP server (none exists in the
+registry) and not the secret iCal link (Google caches those for hours, which is useless for
+a view whose job is "is today realistic?").
+
+- `scripts/google-auth.mjs` — one-time consent. Loopback redirect + PKCE, the flow Google
+  documents for installed apps. The user signs in **in their own browser**; this project
+  never sees a password, only the one-time code.
+- `scripts/refresh-calendar.mjs` — writes `data/calendar.json`. Standalone on purpose, so a
+  terminal, `/sort-inbox` or a cron job can refresh without the app running. `SCHEMAS.md`
+  calls `calendar.json` script-written and app-read-only; this keeps that true.
+- Credentials live in `~/.config/desvu/` (mode 600), never the vault or a repo. Setup steps
+  are in `~/.config/desvu/README.md`.
+- Scope is `calendar.readonly`. The app never writes a calendar, so it never asks to.
+- The app spawns the script using **Electron's own binary** with `ELECTRON_RUN_AS_NODE=1`,
+  so it does not depend on a system `node` or on a GUI app inheriting a login shell's PATH.
+
+Refresh happens **once on app open** plus a manual control. `configured`, `connected` and
+`stale` are three separate states with three different fixes, so the UI names which one it
+is rather than collapsing them into "calendar unavailable". A missing or unconnected
+calendar is never an error — the Today rail reads as an open day.
 
 ## Conventions
 

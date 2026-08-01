@@ -1,6 +1,8 @@
 import type {
   BrainDumpThread,
   CalendarEvent,
+  CalendarRefreshResult,
+  CalendarStatus,
   CategorySpend,
   CreateTodoInput,
   CorrectionFactor,
@@ -143,6 +145,10 @@ export interface DesvuApi {
     forDate(date: DateString): Promise<CalendarEvent[]>
     /** Epoch ms of the last successful refresh, or null if never. */
     lastRefresh(): Promise<number | null>
+    /** Whether a Google refresh token is stored. False means "never connected". */
+    status(): Promise<CalendarStatus>
+    /** Pull from Google into `data/calendar.json`. Resolves with what changed. */
+    refresh(): Promise<CalendarRefreshResult>
   }
 
   settings: {
@@ -230,6 +236,8 @@ export const IPC_CHANNELS = [
 
   'calendar:forDate',
   'calendar:lastRefresh',
+  'calendar:status',
+  'calendar:refresh',
 
   'settings:get',
   'settings:update',

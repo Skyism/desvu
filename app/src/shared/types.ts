@@ -248,6 +248,22 @@ export interface CalendarEvent {
   location?: string
 }
 
+/** Why the calendar is or is not usable, in the terms the UI needs to explain it. */
+export interface CalendarStatus {
+  /** A refresh token is stored. */
+  connected: boolean
+  /** OAuth client credentials exist — without these, connecting is not even possible. */
+  configured: boolean
+  last_refresh: number | null
+}
+
+export interface CalendarRefreshResult {
+  ok: boolean
+  events: number
+  /** Present when the refresh failed, written for a human rather than a log. */
+  error?: string
+}
+
 // ---------------------------------------------------------------------------
 // settings
 // ---------------------------------------------------------------------------

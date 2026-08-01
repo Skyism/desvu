@@ -18,6 +18,10 @@ import {
   type SortInboxRepository,
 } from './repos/sortInboxRepository'
 import {
+  createCalendarSyncRepository,
+  type CalendarSyncRepository,
+} from './repos/calendarSyncRepository'
+import {
   brainDumpRepository,
   synthesisRepository,
   calendarRepository,
@@ -121,6 +125,8 @@ export const ipcHandlers = {
   // --- calendar ----------------------------------------------------------------------
   'calendar:forDate': (date: DateString) => calendarRepository.forDate(date),
   'calendar:lastRefresh': () => calendarRepository.lastRefresh(),
+  'calendar:status': () => calendarSync().status(),
+  'calendar:refresh': () => calendarSync().refresh(),
 
   // --- settings ----------------------------------------------------------------------
   'settings:get': () => settingsRepository.get(),
@@ -155,19 +161,27 @@ async function invoke(channel: IpcChannel, args: unknown[]): Promise<unknown> {
  * only the main entry knows how to reach the renderer windows.
  */
 let sortRepository: SortInboxRepository | null = null
+let calendarSyncRepository: CalendarSyncRepository | null = null
 
 function sortInbox(): SortInboxRepository {
   if (!sortRepository) throw new Error('IPC handlers are not registered yet.')
   return sortRepository
 }
 
+function calendarSync(): CalendarSyncRepository {
+  if (!calendarSyncRepository) throw new Error('IPC handlers are not registered yet.')
+  return calendarSyncRepository
+}
+
 export function registerIpcHandlers(
   ipcMain: IpcMain,
-  broadcast: (channel: string, payload: unknown) => void = () => {}
+  broadcast: (channel: string, payload: unknown) => void = () => {},
+  appRoot: string = process.cwd()
 ): void {
   sortRepository = createSortInboxRepository((progress) =>
     broadcast(IPC_EVENTS.sortProgress, progress)
   )
+  calendarSyncRepository = createCalendarSyncRepository(appRoot)
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, (_event, ...args: unknown[]) => invoke(channel, args))
   }

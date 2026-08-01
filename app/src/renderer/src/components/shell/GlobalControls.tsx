@@ -4,6 +4,7 @@ import { useInboxCount } from '@/store/inbox'
 import { useResolvedTheme, useUi } from '@/store/ui'
 import { QUICK_CAPTURE_HINT } from './QuickCapture'
 import { SortInboxControl } from './SortInboxControl'
+import { CalendarControl } from './CalendarControl'
 
 /**
  * The controls that sit on every surface, rendered by `<Page>`. If something belongs
@@ -19,6 +20,7 @@ export function GlobalControls(): React.JSX.Element {
       <InboxPill count={inbox.data} failed={inbox.error != null} loading={inbox.loading} />
       {/* Sits beside the count it acts on — the pill states the problem, this solves it. */}
       <SortInboxControl pending={inbox.data ?? 0} />
+      <CalendarControl />
       <Button
         variant="secondary"
         size="md"

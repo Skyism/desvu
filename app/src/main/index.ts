@@ -279,7 +279,7 @@ if (!app.requestSingleInstanceLock()) {
     // Owned by the storage workstream (`src/main/ipc-router.ts`). Registers a handler
     // for every entry in IPC_CHANNELS; a stub until the repositories land, which means
     // renderer calls reject and the UI falls through to its error/empty states.
-    registerIpcHandlers(ipcMain, broadcast)
+    registerIpcHandlers(ipcMain, broadcast, app.getAppPath())
 
     startVaultWatcher()
     mainWindow = createWindow()

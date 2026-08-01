@@ -158,6 +158,11 @@ describe('every channel actually runs against an empty vault', () => {
     'inbox:sortAvailable': [],
 
     'calendar:forDate': [dayOffset(0)],
+    'calendar:status': [],
+    // `refresh` spawns a script that talks to Google. It resolves either way — an
+    // unconfigured machine returns `{ok: false}` rather than throwing, which is the
+    // behaviour worth pinning: a missing calendar must never break the app.
+    'calendar:refresh': [],
     'calendar:lastRefresh': [],
 
     'settings:get': [],
