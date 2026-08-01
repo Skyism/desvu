@@ -223,6 +223,18 @@ export interface BrainDumpThread {
 }
 
 // ---------------------------------------------------------------------------
+// synthesis (markdown-backed, written by the synthesis agent)
+// ---------------------------------------------------------------------------
+
+export interface SynthesisNote {
+  /** Vault-relative, e.g. `Synthesis/2026-W31.md`. */
+  path: string
+  /** ISO week key, `YYYY-Www`. */
+  week: string
+  body: string
+}
+
+// ---------------------------------------------------------------------------
 // calendar (written by a refresh script, read-only to the app)
 // ---------------------------------------------------------------------------
 

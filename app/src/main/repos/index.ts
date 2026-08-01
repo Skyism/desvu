@@ -3,6 +3,7 @@
  * router; nothing else in the app is allowed to touch `fs` inside the vault.
  */
 export { brainDumpRepository } from './brainDumpRepository'
+export { synthesisRepository } from './synthesisRepository'
 export { calendarRepository } from './calendarRepository'
 export { financeRepository, UNCATEGORISED } from './financeRepository'
 export { inboxRepository, formatInboxLine, inboxFileFor, INBOX_SEPARATOR } from './inboxRepository'

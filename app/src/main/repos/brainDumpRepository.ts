@@ -77,10 +77,18 @@ function headingTitle(body: string): string | null {
   return match?.[1]?.trim() ?? null
 }
 
+/**
+ * Frontmatter keys, in the order and set that `/sort-inbox` writes them.
+ *
+ * `title` is deliberately absent. The sort skill puts the title in an H1 at the top of the
+ * body and never writes a `title:` key, so emitting one here would leave the vault holding
+ * two flavours of the same file depending on which writer happened to create it. `toThread`
+ * already falls back to the H1, so nothing is lost by dropping it.
+ */
 function toFrontmatter(thread: BrainDumpThread, existing: Frontmatter = {}): Frontmatter {
   const data: Frontmatter = { ...existing }
+  delete data.title
   data.topic = thread.topic
-  data.title = thread.title
   data.created = thread.created
   data.updated = thread.updated
   data.tags = thread.tags
@@ -207,7 +215,9 @@ export const brainDumpRepository = {
         created: today,
         updated: today,
         tags: [],
-        body: appendBlock('', text, today),
+        // The H1 carries the title, matching what `/sort-inbox` writes for a new thread.
+        // Frontmatter holds no `title:` key on either side.
+        body: `# ${title.trim()}\n\n${appendBlock('', text, today)}`,
       }
 
       await atomicWriteFile(absolute, serializeMarkdown(toFrontmatter(thread), thread.body))

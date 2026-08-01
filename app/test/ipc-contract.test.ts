@@ -144,6 +144,10 @@ describe('every channel actually runs against an empty vault', () => {
     'brainDump:createThread': ['Ideas', 'From IPC', 'the first thought'],
     'brainDump:listTopics': [],
 
+    'synthesis:list': [],
+    // A week that has never been written — `read` returns null rather than throwing.
+    'synthesis:read': ['2026-W31'],
+
     'inbox:read': [],
     'inbox:count': [],
 

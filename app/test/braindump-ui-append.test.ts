@@ -76,7 +76,6 @@ describe('appending from the app', () => {
         'created: 2026-07-14',
         `updated: ${today}`,
         'tags: [malloc, systems]',
-        'title: Malloc lab',
         '---',
         '',
         '# Malloc lab',
@@ -236,15 +235,15 @@ describe.skipIf(!available)('byte compatibility with /sort-inbox', () => {
       const body = (raw: string): string => raw.slice(raw.indexOf('\n---\n', 3) + 5)
       expect(body(fromApp)).toBe(body(fromSkill))
 
-      // KNOWN DIVERGENCE, reported to the orchestrator in
-      // `.progress/braindump-synthesis.md`: `brainDumpRepository.toFrontmatter` always
-      // writes `title:`, which `apply_braindump` never does. The skill preserves the key
-      // once it exists, so the two converge after one app write — but the first app append
-      // to a skill-created thread is not byte-identical. Fixing it is one line in
-      // `src/main/repos/brainDumpRepository.ts`, which this workstream does not own.
+      // The front matter matches too, so the files are byte-identical. This used to
+      // diverge by a `title:` key the app wrote and the skill never did; the vault would
+      // then hold two flavours of the same file depending on which writer created it.
+      // `toFrontmatter` no longer emits it — the title lives in the H1, as the skill has
+      // always written it.
       const lines = (raw: string): string[] => raw.split('\n')
       const extra = lines(fromApp).filter((line) => !lines(fromSkill).includes(line))
-      expect(extra).toEqual(['title: Malloc lab'])
+      expect(extra).toEqual([])
+      expect(fromApp).toBe(fromSkill)
     } finally {
       await python.dispose()
       // The helper repoints DESVU_VAULT globally; put it back for the outer vault.
@@ -267,9 +266,9 @@ describe.skipIf(!available)('byte compatibility with /sort-inbox', () => {
     expect(afterSkill.split(`## ${today}`)).toHaveLength(2)
     expect(afterSkill).toContain('One more, later.')
 
-    // Nothing the app wrote was reshaped: the whole prefix survives verbatim, including
-    // the `title:` key, and the file still ends cleanly.
-    expect(afterSkill).toContain('title: Malloc lab')
+    // Nothing the app wrote was reshaped: the whole prefix survives verbatim and the file
+    // still ends cleanly. No `title:` key on either side — the title is the H1.
+    expect(afterSkill).not.toContain('title: Malloc lab')
     expect(afterSkill.startsWith(afterApp.slice(0, afterApp.indexOf('## 2026-07-14')))).toBe(true)
     expect(afterSkill.endsWith('\n')).toBe(true)
     expect(afterSkill).not.toMatch(/\n{3}/)

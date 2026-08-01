@@ -15,6 +15,7 @@ import type {
 import type { CreateLibraryInput } from './repos'
 import {
   brainDumpRepository,
+  synthesisRepository,
   calendarRepository,
   financeRepository,
   inboxRepository,
@@ -102,6 +103,9 @@ export const ipcHandlers = {
   'brainDump:createThread': (topic: string, title: string, text: string) =>
     brainDumpRepository.createThread(topic, title, text),
   'brainDump:listTopics': () => brainDumpRepository.listTopics(),
+
+  'synthesis:list': () => synthesisRepository.list(),
+  'synthesis:read': (week: string) => synthesisRepository.read(week),
 
   // --- inbox -------------------------------------------------------------------------
   'inbox:read': () => inboxRepository.read(),

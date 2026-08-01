@@ -12,6 +12,7 @@ import type {
   Meal,
   Purchase,
   SearchHit,
+  SynthesisNote,
   Settings,
   StreakInfo,
   Todo,
@@ -113,6 +114,13 @@ export interface DesvuApi {
     listTopics(): Promise<string[]>
   }
 
+  synthesis: {
+    /** Newest week first. Bodies included — the folder is one small file per week. */
+    list(): Promise<SynthesisNote[]>
+    /** `week` is an ISO week key, e.g. `2026-W31`. */
+    read(week: string): Promise<SynthesisNote | null>
+  }
+
   inbox: {
     /** Raw unsorted lines, newest first. */
     read(): Promise<{ file: string; line: string; at: Timestampish }[]>
@@ -198,6 +206,9 @@ export const IPC_CHANNELS = [
   'brainDump:appendToThread',
   'brainDump:createThread',
   'brainDump:listTopics',
+
+  'synthesis:list',
+  'synthesis:read',
 
   'inbox:read',
   'inbox:count',

@@ -359,7 +359,8 @@ would have invented), a Library item, a synthesis note, `settings.json`.
   in this workstream went through an explicit `DESVU_VAULT`, so nothing here touched or
   depended on the stray, and the round-trip evidence above was re-run against the restored
   path.
-- At the time of writing, `tsc --noEmit` reports 39 errors in
+- Mid-session `tsc --noEmit` briefly reported 39 errors in
   `src/main/repos/financeRepository.ts` and `test/finance-ui-budget.test.ts` — a sibling
-  workstream mid-edit against a `CategorySpend.configured` field. **Zero are in any file
-  owned here**, and the build and the full 414-test suite are green.
+  workstream mid-edit against a `CategorySpend.configured` field. None were in any file
+  owned here, and they have since cleared: the final pass is **clean across the whole
+  tree**, with the build and all 414 tests green.
