@@ -1,0 +1,54 @@
+{
+  "source": "fonts.googleapis.com/css2",
+  "variable": true,
+  "files": [
+    {
+      "family": "Cormorant",
+      "style": "italic",
+      "weight": "300 700",
+      "subset": "latin-ext",
+      "file": "cormorant-italic-latin-ext.woff2",
+      "bytes": 31264
+    },
+    {
+      "family": "Cormorant",
+      "style": "italic",
+      "weight": "300 700",
+      "subset": "latin",
+      "file": "cormorant-italic-latin.woff2",
+      "bytes": 38076
+    },
+    {
+      "family": "Cormorant",
+      "style": "normal",
+      "weight": "300 700",
+      "subset": "latin-ext",
+      "file": "cormorant-normal-latin-ext.woff2",
+      "bytes": 30304
+    },
+    {
+      "family": "Cormorant",
+      "style": "normal",
+      "weight": "300 700",
+      "subset": "latin",
+      "file": "cormorant-normal-latin.woff2",
+      "bytes": 35280
+    },
+    {
+      "family": "DM Sans",
+      "style": "normal",
+      "weight": "100 1000",
+      "subset": "latin-ext",
+      "file": "dm-sans-normal-latin-ext.woff2",
+      "bytes": 31312
+    },
+    {
+      "family": "DM Sans",
+      "style": "normal",
+      "weight": "100 1000",
+      "subset": "latin",
+      "file": "dm-sans-normal-latin.woff2",
+      "bytes": 62556
+    }
+  ]
+}
