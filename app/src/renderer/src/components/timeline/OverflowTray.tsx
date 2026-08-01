@@ -16,6 +16,16 @@ export interface OverflowTrayProps {
 }
 
 /**
+ * How many names the tray shows before it stops counting out loud.
+ *
+ * On a badly overcommitted day the honest answer is "nine things", and nine rows makes
+ * the hero twice the height of the rail it exists to annotate — at which point the thing
+ * you are supposed to see at a glance no longer fits on the glance. The full set is
+ * always in the list below; the tray's job is to name enough of it to be actionable.
+ */
+const VISIBLE = 5
+
+/**
  * WON'T FIT TODAY.
  *
  * The tray is the point of the whole hero: not "you are over by 2h10m" but *these three,
@@ -31,9 +41,11 @@ export function OverflowTray({
   spilled = [],
 }: OverflowTrayProps): React.JSX.Element {
   const items = [...overflow, ...spilled]
+  const shown = items.slice(0, VISIBLE)
+  const rest = items.length - shown.length
 
   return (
-    <div className="border-line flex flex-none basis-[196px] flex-col gap-[9px] border-l pl-5">
+    <div className="border-line flex flex-none basis-[212px] flex-col gap-[9px] self-start border-l pl-5">
       <div className="text-micro tracking-label text-muted uppercase">
         {items.length > 0 ? "Won't fit today" : 'All placed'}
       </div>
@@ -41,17 +53,22 @@ export function OverflowTray({
       {items.length === 0 ? (
         <p className="text-muted text-xs">Everything on the list has somewhere to go.</p>
       ) : (
-        <ul className="flex flex-col gap-[9px]">
-          {items.map((todo) => (
-            <li key={todo.id} className="flex items-center gap-[9px]">
-              <CategoryMarker category={todo.category} size={7} />
-              <span className="text-ink2 min-w-0 flex-1 text-xs leading-[1.35]">{todo.text}</span>
-              <span className="text-muted text-xs" data-numeric>
-                {estimateOf(todo, fallbackEstimate)}m
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-[9px]">
+            {shown.map((todo) => (
+              <li key={todo.id} className="flex items-center gap-[9px]">
+                <CategoryMarker category={todo.category} size={7} />
+                <span className="text-ink2 min-w-0 flex-1 text-xs leading-[1.35]">{todo.text}</span>
+                <span className="text-muted text-xs" data-numeric>
+                  {estimateOf(todo, fallbackEstimate)}m
+                </span>
+              </li>
+            ))}
+          </ul>
+          {rest > 0 && (
+            <p className="text-muted text-xs">and {rest} more on the list below.</p>
+          )}
+        </>
       )}
     </div>
   )

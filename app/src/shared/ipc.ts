@@ -12,6 +12,7 @@ import type {
   Meal,
   Purchase,
   SearchHit,
+  SortInboxResult,
   SynthesisNote,
   Settings,
   StreakInfo,
@@ -125,6 +126,17 @@ export interface DesvuApi {
     /** Raw unsorted lines, newest first. */
     read(): Promise<{ file: string; line: string; at: Timestampish }[]>
     count(): Promise<number>
+    /**
+     * Run `/sort-inbox` by spawning the Claude CLI in the vault.
+     *
+     * The bot is a dumb receiver by design, so this is where raw captures become records.
+     * It is a separate process writing the same trackers as the app, which is exactly what
+     * the cross-process lock exists for.
+     */
+    sort(options?: { dryRun?: boolean }): Promise<SortInboxResult>
+    cancelSort(): Promise<void>
+    /** False when the Claude CLI is not installed — the control hides rather than failing. */
+    sortAvailable(): Promise<boolean>
   }
 
   calendar: {
@@ -212,6 +224,9 @@ export const IPC_CHANNELS = [
 
   'inbox:read',
   'inbox:count',
+  'inbox:sort',
+  'inbox:cancelSort',
+  'inbox:sortAvailable',
 
   'calendar:forDate',
   'calendar:lastRefresh',
@@ -237,4 +252,6 @@ export const IPC_EVENTS = {
    * when the window is unfocused, so opening the capture field has to be pushed.
    */
   quickCapture: 'event:quick-capture',
+  /** Streamed while `/sort-inbox` runs, so a two-minute wait does not look like a hang. */
+  sortProgress: 'event:sort-progress',
 } as const

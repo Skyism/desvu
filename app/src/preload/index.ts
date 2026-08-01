@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import { IPC_CHANNELS, IPC_EVENTS, type DesvuApi } from '@shared/ipc'
+import type { SortInboxProgress } from '@shared/types'
 
 /**
  * The only thing the renderer can see of the main process.
@@ -34,17 +35,14 @@ export type Unsubscribe = () => void
 export type DesvuBridge = DesvuApi & {
   /** Fires after a debounced burst of vault writes. Returns an unsubscribe function. */
   onVaultChanged(listener: (payload: VaultChangedPayload) => void): Unsubscribe
-  /**
-   * Fires when the global quick-capture accelerator is pressed.
-   *
-   * NOT yet part of `@shared/ipc` — `IPC_EVENTS` declares only `vaultChanged`, and that
-   * file is owned by the orchestrator. Folding this in is requested in
-   * `.progress/design-system.md`.
-   */
+  /** Fires when the global quick-capture accelerator is pressed. */
   onQuickCapture(listener: (payload: QuickCapturePayload) => void): Unsubscribe
+  /**
+   * Fires repeatedly while `/sort-inbox` runs. A sort takes 40-115 seconds, so the
+   * renderer needs something to show other than a spinner.
+   */
+  onSortProgress(listener: (payload: SortInboxProgress) => void): Unsubscribe
 }
-
-const EVENT_QUICK_CAPTURE = 'event:quick-capture'
 
 type Invoker = (...args: unknown[]) => Promise<unknown>
 
@@ -75,7 +73,8 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): Unsubscr
 const bridge: DesvuBridge = {
   ...buildApi(),
   onVaultChanged: (listener) => subscribe(IPC_EVENTS.vaultChanged, listener),
-  onQuickCapture: (listener) => subscribe(EVENT_QUICK_CAPTURE, listener),
+  onQuickCapture: (listener) => subscribe(IPC_EVENTS.quickCapture, listener),
+  onSortProgress: (listener) => subscribe(IPC_EVENTS.sortProgress, listener),
 }
 
 contextBridge.exposeInMainWorld('desvu', bridge)

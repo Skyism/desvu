@@ -10,10 +10,11 @@ import { cn } from '@/lib/cn'
 import { createTodo, removeTodo, updateTodo } from '@/store/todos'
 import { PRIORITY_LABEL } from './grouping'
 import {
-  DEFAULT_RECURRENCE_FORM,
   WEEKDAYS,
   WEEKDAY_LABEL,
+  defaultRecurrenceForm,
   describeRecurrence,
+  detachCopy,
   formFromRecurrence,
   recurrenceFromForm,
   type RecurrenceForm,
@@ -59,7 +60,7 @@ export function RecurrenceDialog({
   const [category, setCategory] = useState<Category>('personal')
   const [priority, setPriority] = useState<Priority>(defaultPriority)
   const [estimate, setEstimate] = useState(String(defaultEstimate))
-  const [form, setForm] = useState<RecurrenceForm>({ ...DEFAULT_RECURRENCE_FORM })
+  const [form, setForm] = useState<RecurrenceForm>(defaultRecurrenceForm)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -293,16 +294,7 @@ export function RecurrenceDialog({
           <p className="text-estimate text-base">{preview}</p>
         )}
 
-        {confirmingDelete && (
-          <p className="text-muted text-sm">
-            {instanceCount > 0
-              ? `Deleting the rule stops new copies. The ${instanceCount} task${
-                  instanceCount === 1 ? '' : 's'
-                } it already made stay exactly where they are — including anything
-                 half-finished, and the finished ones your estimates are calibrated from.`
-              : 'Deleting the rule stops new copies. Nothing else is removed.'}
-          </p>
-        )}
+        {confirmingDelete && <p className="text-muted text-sm">{detachCopy(instanceCount)}</p>}
       </div>
     </Dialog>
   )

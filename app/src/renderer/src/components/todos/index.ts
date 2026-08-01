@@ -39,7 +39,9 @@ export {
   DEFAULT_RECURRENCE_FORM,
   WEEKDAYS,
   WEEKDAY_LABEL,
+  defaultRecurrenceForm,
   describeRecurrence,
+  detachCopy,
   formFromRecurrence,
   recurrenceFromForm,
 } from './recurrence'

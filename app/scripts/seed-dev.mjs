@@ -46,45 +46,98 @@ const KEEP = args.includes('--keep')
 // the guard
 // ---------------------------------------------------------------------------
 
-/** Every place the real corpus could be, resolved through symlinks. */
-function protectedRoots() {
-  const candidates = [
-    path.join(homedir(), 'Documents', 'Dès vu'),
-    path.join(
-      homedir(),
-      'Library',
-      'Mobile Documents',
-      'iCloud~md~obsidian',
-      'Documents',
-      'Dès vu'
-    ),
-  ]
-  const roots = []
-  for (const candidate of candidates) {
-    for (const form of [candidate.normalize('NFC'), candidate.normalize('NFD')]) {
-      if (!existsSync(form)) continue
-      try {
-        roots.push(realpathSync(form))
-      } catch {
-        roots.push(form)
-      }
+/**
+ * The marker that says "this directory is mine to overwrite".
+ *
+ * A path check is a heuristic and this script learned that the hard way: an earlier
+ * version compared `path.resolve(out)` against the *realpath* of the protected roots, so
+ * `~/Documents/Dès vu` — a symlink into the iCloud container — resolved to the container
+ * on one side of the comparison and not the other, matched nothing, and was cleared. It
+ * removed the symlink rather than the corpus, but only by luck of how `fs.rm` treats one.
+ *
+ * So the destructive step is no longer gated on a path at all. It is gated on a file this
+ * script itself wrote. A directory without the marker is somebody else's, whatever its
+ * path says.
+ */
+const MARKER = '.desvu-dev-vault'
+
+/** Both the literal path and what it resolves to, in both Unicode normalizations. */
+function expand(candidate) {
+  const out = new Set()
+  for (const form of [candidate.normalize('NFC'), candidate.normalize('NFD')]) {
+    out.add(form)
+    if (!existsSync(form)) continue
+    try {
+      out.add(realpathSync(form))
+    } catch {
+      /* unreadable is still worth refusing on the literal form */
     }
   }
-  return roots
+  return [...out]
+}
+
+/** Every place the real corpus could be — as written, and as resolved. */
+function protectedRoots() {
+  return [
+    path.join(homedir(), 'Documents', 'Dès vu'),
+    path.join(homedir(), 'Library', 'Mobile Documents', 'iCloud~md~obsidian', 'Documents', 'Dès vu'),
+  ].flatMap(expand)
+}
+
+/** The nearest ancestor that exists, resolved through symlinks. */
+function resolveThroughAncestors(target) {
+  let current = path.resolve(target)
+  const trailing = []
+  for (;;) {
+    if (existsSync(current)) {
+      try {
+        return path.join(realpathSync(current), ...trailing)
+      } catch {
+        return path.join(current, ...trailing)
+      }
+    }
+    const parent = path.dirname(current)
+    if (parent === current) return path.resolve(target)
+    trailing.unshift(path.basename(current))
+    current = parent
+  }
 }
 
 function refuseIfReal(target) {
-  const resolved = path.resolve(target)
+  // Check the literal path AND the path with every symlink on it resolved. The first
+  // catches `--out ~/Documents/Dès vu`; the second catches a symlink pointing at it.
+  const forms = new Set([
+    path.resolve(target).normalize('NFC'),
+    resolveThroughAncestors(target).normalize('NFC'),
+  ])
+
   for (const root of protectedRoots()) {
     const normalizedRoot = root.normalize('NFC')
-    const normalizedTarget = resolved.normalize('NFC')
-    if (normalizedTarget === normalizedRoot || normalizedTarget.startsWith(normalizedRoot + path.sep)) {
-      throw new Error(
-        `Refusing to seed into the real vault (${root}). That directory holds live ` +
-          `personal data and has no remote to recover from. Pass --out somewhere else.`
-      )
+    for (const form of forms) {
+      if (form === normalizedRoot || form.startsWith(normalizedRoot + path.sep)) {
+        throw new Error(
+          `Refusing to seed into the real vault (${root}). That directory holds live ` +
+            `personal data and has no remote to recover from. Pass --out somewhere else.`
+        )
+      }
     }
   }
+}
+
+/**
+ * Clear a previous run. Refuses anything this script did not create — the path guard
+ * above is the first line, this is the one that actually holds.
+ */
+async function clearPreviousRun(target) {
+  if (!existsSync(target)) return
+  if (!existsSync(path.join(target, MARKER))) {
+    throw new Error(
+      `${target} already exists and has no ${MARKER} marker, so it was not created by ` +
+        `this script. Refusing to delete it. Pass --out somewhere else, or remove it ` +
+        `yourself if you are sure.`
+    )
+  }
+  await rm(target, { recursive: true, force: true })
 }
 
 // ---------------------------------------------------------------------------
@@ -278,9 +331,16 @@ async function main() {
     return
   }
 
-  if (!KEEP && existsSync(OUT)) await rm(OUT, { recursive: true, force: true })
+  if (!KEEP) await clearPreviousRun(OUT)
   await mkdir(path.join(OUT, 'data'), { recursive: true })
   await mkdir(path.join(OUT, 'Inbox'), { recursive: true })
+  // Written first, so a run interrupted half way still leaves a directory the next run
+  // is allowed to clear.
+  await writeFile(
+    path.join(OUT, MARKER),
+    'Created by app/scripts/seed-dev.mjs. Safe to delete. Never point this at the real vault.\n',
+    'utf8'
+  )
 
   const todos = [...OPEN_TODOS, ...TEMPLATES, ...HISTORY, ...THIN_HISTORY]
 

@@ -223,6 +223,33 @@ If you ever find `~/Documents/Dès vu` is a directory rather than a symlink, tha
 bug recurring. The real bytes are always at
 `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Dès vu`.
 
+### The capture loop, end to end
+
+**The bot never sorts. That is deliberate and it is not a limitation to be fixed.**
+
+1. Text the bot anything, from anywhere, laptop closed. It appends a raw timestamped line
+   to `Inbox/YYYY-MM-DD.md` and replies `✓ inbox`. No parsing, no classification.
+2. All the intelligence lives in `/sort-inbox`, run later from Claude Code in the vault.
+   It routes each line: article → `Library/`, `$20 lunch` → `finance.json`, a workout →
+   `workouts.json`, a meal → `meals.json`, anything actionable → `todos.json`.
+
+Splitting it this way means a capture can never be lost because classification failed. The
+worst case is a line waits in the Inbox. That trade is the whole point.
+
+`/sort-inbox` scans **every** `Inbox/*.md`, not just today's, because Telegram stamps send
+time — see the bot section above.
+
+**In-app button:** the app can shell out to `claude -p "/sort-inbox"` to run the same skill
+from a button. Two things a naive implementation gets wrong:
+
+- Headless has no permission prompt, so tools must be passed explicitly via `--allowedTools`
+  scoped to what `.claude/commands/sort-inbox.md` declares. Without it the run *appears* to
+  succeed while every `python3` call is silently denied and nothing is actually scanned.
+  **Never** reach for `--dangerously-skip-permissions` — that hands a background process
+  unrestricted tool access to the machine.
+- A run takes **~2 minutes even on an empty inbox**. It needs streaming progress and a
+  cancel, not a spinner, and a partial run must say so rather than showing a green check.
+
 ## Conventions
 
 - **Storage pattern** is ported from `~/Desktop/Vscode/gratefulnessjar/server/entryRepository.ts`:

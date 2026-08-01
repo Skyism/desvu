@@ -6,7 +6,7 @@ import { Page } from '@/components/Page'
 import { SkeletonLines } from '@/components/Skeleton'
 import { RepeatingCard, TodoList, todaysList } from '@/components/todos'
 import { TimelineHero, useClockBucket, useNowMinute } from '@/components/timeline'
-import { formatDayLine, toDateString } from '@/lib/date'
+import { formatClock, formatDayLine, toDateString } from '@/lib/date'
 import { ROUTES } from '@/lib/routes'
 import { useCalendarForDate } from '@/store/calendar'
 import { useInboxLines } from '@/store/inbox'
@@ -125,7 +125,12 @@ function InboxCard(): React.JSX.Element {
         <ul className="text-ink2 flex flex-col gap-2.5 font-mono text-xs">
           {data.map((line, index) => (
             <li key={`${line.file}-${index}`} className="bg-fill rounded-field px-3 py-2.5 leading-[1.45]">
-              <span className="text-muted">{line.at}</span> {line.line}
+              {/* `at` is epoch ms; the comp shows a clock. The raw line carries the
+                  checkbox and its own `HH:MM ·` prefix, so both are stripped and the send
+                  time is rendered once. A line that does not match the bot's format keeps
+                  every character — an unroutable capture staying legible is the point. */}
+              <span className="text-muted">{formatClock(new Date(line.at))}</span>{' '}
+              {line.line.replace(/^-\s*\[[ xX]\]\s*(\d{1,2}:\d{2}\s*·\s*)?/, '')}
             </li>
           ))}
         </ul>

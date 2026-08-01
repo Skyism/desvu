@@ -50,6 +50,32 @@ export function describeRecurrence(rule: Recurrence | null): string {
   return rule.interval === 1 ? `Monthly on ${day}` : `Every ${rule.interval} months on ${day}`
 }
 
+/**
+ * What "delete" actually does to a recurring task, said before the click.
+ *
+ * The repository **detaches** rather than cascading: every task the rule already produced
+ * survives as an ordinary one-off, keeping half-finished work and the completed history
+ * the T11 calibration is derived from. That is the right behaviour and the wrong default
+ * expectation, so the number is named out loud — "the 3 tasks it already made" is the
+ * part a user is about to be surprised by.
+ */
+export function detachCopy(instanceCount: number): string {
+  if (instanceCount <= 0) {
+    return 'Deleting the rule stops new copies. Nothing else is removed.'
+  }
+  if (instanceCount === 1) {
+    return (
+      'Deleting the rule stops new copies. The one task it already made stays on your ' +
+      'list as an ordinary task — including if you are part-way through it.'
+    )
+  }
+  return (
+    `Deleting the rule stops new copies. The ${instanceCount} tasks it already made stay ` +
+    'exactly where they are — anything half-finished, and the finished ones your ' +
+    'estimates are calibrated from.'
+  )
+}
+
 export interface RecurrenceForm {
   type: Recurrence['type']
   interval: number
@@ -57,33 +83,32 @@ export interface RecurrenceForm {
   dayOfMonth: number
 }
 
-export const DEFAULT_RECURRENCE_FORM: RecurrenceForm = {
+/**
+ * Frozen, because it is a module-level object with an array in it and a shallow spread
+ * would hand every dialog the *same* `days` array to push into. Build form state with
+ * `defaultRecurrenceForm()` or `formFromRecurrence()`, never by spreading this.
+ */
+export const DEFAULT_RECURRENCE_FORM: Readonly<RecurrenceForm> = Object.freeze({
   type: 'daily',
   interval: 1,
-  days: ['mon', 'wed', 'fri'],
+  days: Object.freeze(['mon', 'wed', 'fri']) as Weekday[],
   dayOfMonth: 1,
+})
+
+/** A fresh, independently mutable copy of the default. */
+export function defaultRecurrenceForm(): RecurrenceForm {
+  return { type: 'daily', interval: 1, days: ['mon', 'wed', 'fri'], dayOfMonth: 1 }
 }
 
 /** A rule read back into form state, so editing a template opens on what it actually is. */
 export function formFromRecurrence(rule: Recurrence | null): RecurrenceForm {
-  if (rule === null) return { ...DEFAULT_RECURRENCE_FORM }
-  if (rule.type === 'daily') {
-    return { ...DEFAULT_RECURRENCE_FORM, type: 'daily', interval: rule.interval }
-  }
+  const form = defaultRecurrenceForm()
+  if (rule === null) return form
+  if (rule.type === 'daily') return { ...form, type: 'daily', interval: rule.interval }
   if (rule.type === 'weekly') {
-    return {
-      ...DEFAULT_RECURRENCE_FORM,
-      type: 'weekly',
-      interval: rule.interval,
-      days: [...rule.days],
-    }
+    return { ...form, type: 'weekly', interval: rule.interval, days: [...rule.days] }
   }
-  return {
-    ...DEFAULT_RECURRENCE_FORM,
-    type: 'monthly',
-    interval: rule.interval,
-    dayOfMonth: rule.day_of_month,
-  }
+  return { ...form, type: 'monthly', interval: rule.interval, dayOfMonth: rule.day_of_month }
 }
 
 /**

@@ -30,13 +30,8 @@ const WINDOW_BG = { light: '#FDFAF3', dark: '#0B0A08' } as const
 /** PRD C8 — desktop quick capture. Reaches the app even when it is not focused. */
 const QUICK_CAPTURE_ACCELERATOR = 'CommandOrControl+Shift+Space'
 
-/**
- * Renderer-local push event. NOT part of `@shared/ipc` — that file is owned by the
- * orchestrator and `IPC_EVENTS` currently declares only `vaultChanged`. Folding this
- * in is requested in `.progress/design-system.md`; until then the string lives here
- * and in `src/preload/index.ts`, and nowhere else.
- */
-const EVENT_QUICK_CAPTURE = 'event:quick-capture'
+/** Now declared on `@shared/ipc` alongside the other push events. */
+const EVENT_QUICK_CAPTURE = IPC_EVENTS.quickCapture
 
 /**
  * Production renderers are served from `desvu://app/` rather than `file://`.
@@ -284,7 +279,7 @@ if (!app.requestSingleInstanceLock()) {
     // Owned by the storage workstream (`src/main/ipc-router.ts`). Registers a handler
     // for every entry in IPC_CHANNELS; a stub until the repositories land, which means
     // renderer calls reject and the UI falls through to its error/empty states.
-    registerIpcHandlers(ipcMain)
+    registerIpcHandlers(ipcMain, broadcast)
 
     startVaultWatcher()
     mainWindow = createWindow()

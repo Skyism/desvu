@@ -309,6 +309,37 @@ export interface DayLoad {
   overflow: Todo[]
 }
 
+/**
+ * The outcome of an in-app `/sort-inbox` run.
+ *
+ * `filed` and `needsYou` are derived from the Inbox itself — unsorted lines counted before
+ * and after — not parsed out of the agent's summary. A model that says it filed five things
+ * cannot make that true, and this is a number the user will act on.
+ */
+export interface SortInboxResult {
+  ok: boolean
+  cancelled: boolean
+  /** Lines that left the unsorted state. */
+  filed: number
+  /** Lines still unsorted. Headless cannot ask questions, so ambiguous ones stay put. */
+  needsYou: number
+  /** The agent's own closing summary, shown as prose. */
+  summary: string
+  duration_ms: number
+  /**
+   * Set when the run finished but could not do everything it intended — a denied tool, a
+   * malformed tracker. Must reach the UI: a partial run that renders as success is a lie.
+   */
+  degraded?: string
+}
+
+/** Streamed while a sort runs, so a two-minute wait does not look like a hang. */
+export interface SortInboxProgress {
+  phase: 'starting' | 'scanning' | 'routing' | 'writing' | 'done'
+  /** A short human-readable line, e.g. "reading Inbox/2026-08-01.md". */
+  note: string
+}
+
 export interface SearchHit {
   kind: 'todo' | 'journal' | 'library' | 'brain-dump' | 'meal' | 'workout' | 'purchase' | 'synthesis'
   id: string

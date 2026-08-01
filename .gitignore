@@ -5,3 +5,9 @@ dist/
 *.log
 .env
 .env.*
+
+# Screenshots of the journal surface show real entries — six months of personal
+# reflection. Agent runs drive that surface against a copy of the live corpus, so
+# these must never be committed, private repo or not.
+.progress/journal-surface/
+.progress/**/journal*.png

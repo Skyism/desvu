@@ -150,6 +150,12 @@ describe('every channel actually runs against an empty vault', () => {
 
     'inbox:read': [],
     'inbox:count': [],
+    // `sort` spawns the Claude CLI and costs real money, so the contract test exercises
+    // the dry-run path only. `sortAvailable` and `cancelSort` are safe unconditionally —
+    // cancelling with nothing running is a no-op by design.
+    'inbox:sort': [{ dryRun: true }],
+    'inbox:cancelSort': [],
+    'inbox:sortAvailable': [],
 
     'calendar:forDate': [dayOffset(0)],
     'calendar:lastRefresh': [],
@@ -225,7 +231,16 @@ describe('every channel actually runs against an empty vault', () => {
       'todos:remove': thirdTodo.id,
     }
 
+    /**
+     * `inbox:sort` spawns the Claude CLI, which takes 40–115 seconds and bills real
+     * tokens. Invoking it here would put a minute and a dollar on every `vitest run`.
+     * It stays in `calls` so the coverage test still forces anyone adding a channel to
+     * think about it; only the invocation is skipped, and only for this reason.
+     */
+    const SPAWNS_A_BILLED_PROCESS = new Set(['inbox:sort'])
+
     for (const channel of IPC_CHANNELS) {
+      if (SPAWNS_A_BILLED_PROCESS.has(channel)) continue
       const args = (calls[channel] ?? []).map((arg) => {
         if (typeof arg !== 'string') return arg
         if (arg === '__id__' && perChannelId[channel]) return perChannelId[channel]

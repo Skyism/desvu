@@ -1,5 +1,5 @@
 import type { IpcMain } from 'electron'
-import { IPC_CHANNELS } from '@shared/ipc'
+import { IPC_CHANNELS, IPC_EVENTS } from '@shared/ipc'
 import type { DeepPartial, IpcChannel } from '@shared/ipc'
 import type {
   CreateTodoInput,
@@ -13,6 +13,10 @@ import type {
   Workout,
 } from '@shared/types'
 import type { CreateLibraryInput } from './repos'
+import {
+  createSortInboxRepository,
+  type SortInboxRepository,
+} from './repos/sortInboxRepository'
 import {
   brainDumpRepository,
   synthesisRepository,
@@ -110,6 +114,9 @@ export const ipcHandlers = {
   // --- inbox -------------------------------------------------------------------------
   'inbox:read': () => inboxRepository.read(),
   'inbox:count': () => inboxRepository.count(),
+  'inbox:sort': (options?: { dryRun?: boolean }) => sortInbox().sort(options ?? {}),
+  'inbox:cancelSort': () => sortInbox().cancel(),
+  'inbox:sortAvailable': () => sortInbox().available(),
 
   // --- calendar ----------------------------------------------------------------------
   'calendar:forDate': (date: DateString) => calendarRepository.forDate(date),
@@ -143,7 +150,24 @@ async function invoke(channel: IpcChannel, args: unknown[]): Promise<unknown> {
   }
 }
 
-export function registerIpcHandlers(ipcMain: IpcMain): void {
+/**
+ * Set by `registerIpcHandlers`. The sort repository streams progress while it runs, and
+ * only the main entry knows how to reach the renderer windows.
+ */
+let sortRepository: SortInboxRepository | null = null
+
+function sortInbox(): SortInboxRepository {
+  if (!sortRepository) throw new Error('IPC handlers are not registered yet.')
+  return sortRepository
+}
+
+export function registerIpcHandlers(
+  ipcMain: IpcMain,
+  broadcast: (channel: string, payload: unknown) => void = () => {}
+): void {
+  sortRepository = createSortInboxRepository((progress) =>
+    broadcast(IPC_EVENTS.sortProgress, progress)
+  )
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, (_event, ...args: unknown[]) => invoke(channel, args))
   }
