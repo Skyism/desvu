@@ -99,16 +99,35 @@ Stages are from PRD §10.
 | 1 | Vault, schemas, git init | ✅ done |
 | 2 | Storage layer (repositories + mutation lock) | ✅ 12 repos, 136 tests |
 | 3 | Telegram bot ✅ (67 tests) + `/sort-inbox` ✅ | done |
-| 4 | Design system → tokens, fonts ✅, primitives | ⏳ wave 1 |
-| 5 | Electron shell + dashboard frame | ⏳ wave 1 |
-| 6 | To-do list + Today view + recurrence | ⬜ wave 2 |
-| 7 | Journal migration ✅ / reflection form ⬜ | migration done — 83/83 lossless |
-| 8 | Finance · meals · workouts | ⬜ wave 2 |
+| 4 | Design system → tokens, fonts, primitives | ✅ |
+| 5 | Electron shell + dashboard frame | ✅ builds and runs |
+| 6 | To-do list + Today view + recurrence | ⏳ wave 2 |
+| 7 | Journal migration ✅ / reflection form ⏳ | migration 83/83 lossless |
+| 8 | Finance · meals · workouts | ⏳ wave 2 |
 | 9 | Calendar · Gmail | ⬜ deferred (needs isolated MCP config) |
-| 10 | Explore library | ⬜ wave 2 |
-| 11 | Search across everything | ⬜ wave 2 |
-| 12 | Brain dump threads · synthesis · `/ask` | ⬜ wave 2 |
+| 10 | Explore library | ⏳ wave 2 |
+| 11 | Search across everything | ⏳ wave 2 |
+| 12 | Brain dump threads · synthesis · `/ask` | ⏳ wave 2 |
 | 13 | Always-on shakedown | ⬜ |
+
+### Surface contract (wave 2 onward)
+
+Every routed surface returns **exactly one `<Page title eyebrow? description? actions?>`**
+and nothing above it. `<Page>` owns the eyebrow, the Cormorant title, gutters, the scroll
+container and persistent controls; its children are the content column with the 20px
+gutter already applied. Do not add chrome, do not nest a second `Page`, do not reach
+around it to style the frame.
+
+Reads go through `useVaultQuery(() => bridge().x.y(), [])`. Writes are plain async
+functions that call `bridge()` then `invalidateVault()`. Errors render as a quiet line
+inside a card — never red, never a blank screen.
+
+Each surface lives in its own file under `src/renderer/src/surfaces/`, so they can be
+built independently. `surfaces/index.tsx` is just the route table.
+
+**Tailwind's default palette is cleared** — `bg-red-500` does not exist. Red can only come
+from `--danger`, which is used in exactly two places, both destructive. If a surface needs
+to signal over-budget, overdue, or over-capacity, the answer is **gold**.
 
 ## Facts established by measurement — do not re-derive, do not contradict
 
