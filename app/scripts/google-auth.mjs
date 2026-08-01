@@ -53,7 +53,12 @@ async function main() {
   const { verifier, challenge } = pkce()
   const state = base64url(randomBytes(24))
 
-  const { code, port } = await new Promise((resolve, reject) => {
+  // Captured in the listen callback and kept here: `server.address()` returns null once
+  // the server is closed, and the callback closes it before resolving.
+  let port = 0
+  let timer
+
+  const code = await new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url, `http://127.0.0.1`)
       if (url.pathname !== '/callback') {
@@ -61,33 +66,44 @@ async function main() {
         return
       }
 
+      // Close and clear together, always — a stray timer keeps the process alive for five
+      // minutes after a successful auth, which reads as a hang.
+      const done = (page, detail, settle) => {
+        res.writeHead(200, { 'content-type': 'text/html' })
+        res.end(donePage(page, detail))
+        clearTimeout(timer)
+        server.close()
+        settle()
+      }
+
       const error = url.searchParams.get('error')
       if (error) {
-        res.writeHead(200, { 'content-type': 'text/html' })
-        res.end(donePage('Not connected', `Google said: ${error}. You can close this tab.`))
-        server.close()
-        reject(new Error(`Google returned "${error}"`))
+        done('Not connected', `Google said: ${error}. You can close this tab.`, () =>
+          reject(new Error(`Google returned "${error}"`))
+        )
         return
       }
 
       // Without this check a malicious page could feed us someone else's code.
       if (url.searchParams.get('state') !== state) {
-        res.writeHead(400, { 'content-type': 'text/html' })
-        res.end(donePage('Not connected', 'The response did not match this request.'))
-        server.close()
-        reject(new Error('state mismatch — the callback did not come from this request'))
+        done('Not connected', 'The response did not match this request.', () =>
+          reject(new Error('state mismatch — the callback did not come from this request'))
+        )
         return
       }
 
-      res.writeHead(200, { 'content-type': 'text/html' })
-      res.end(donePage('Calendar connected', 'You can close this tab and go back to Dès vu.'))
-      server.close()
-      resolve({ code: url.searchParams.get('code'), port: server.address().port })
+      // Deliberately does NOT say "connected": all Google has told us is that you
+      // approved. Whether the token exchange succeeds is only known back in the terminal,
+      // and claiming success here was a lie the first version told.
+      const authCode = url.searchParams.get('code')
+      done('Approved', 'You can close this tab — check the terminal for the result.', () =>
+        resolve(authCode)
+      )
     })
 
     // Port 0 lets the OS pick, so nothing collides with a dev server.
     server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port
+      port = server.address().port
       const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       auth.searchParams.set('client_id', client.client_id)
       auth.searchParams.set('redirect_uri', `http://127.0.0.1:${port}/callback`)
@@ -106,11 +122,13 @@ async function main() {
       spawn('open', [auth.toString()], { stdio: 'ignore', detached: true }).unref()
     })
 
-    setTimeout(() => {
+    timer = setTimeout(() => {
       server.close()
       reject(new Error('Timed out waiting for approval (5 minutes).'))
     }, 5 * 60 * 1000)
   })
+
+  if (!code) throw new Error('Google redirected back without an authorization code.')
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -127,7 +145,16 @@ async function main() {
 
   const token = await res.json()
   if (!res.ok) {
-    throw new Error(`Token exchange failed: ${token.error_description ?? token.error ?? res.status}`)
+    // Google's `error_description` is often just "Bad Request", which says nothing. The
+    // `error` code is the part that identifies the problem, so lead with it.
+    const code = token.error ?? `HTTP ${res.status}`
+    const detail = token.error_description ? ` — ${token.error_description}` : ''
+    const hint =
+      token.error === 'invalid_grant'
+        ? '\n  The authorization code was already used or has expired. Codes are ' +
+          'single-use and short-lived, so just run this again.'
+        : ''
+    throw new Error(`Token exchange failed: ${code}${detail}${hint}`)
   }
   if (!token.refresh_token) {
     throw new Error(
