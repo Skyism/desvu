@@ -1,0 +1,16 @@
+{
+  "name": "desvu-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dès vu capture bot — Telegram long-poll receiver that appends to the vault Inbox",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "grammy": "^1.34.0"
+  }
+}

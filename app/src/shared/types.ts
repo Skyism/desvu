@@ -1,0 +1,291 @@
+/**
+ * Canonical record shapes. These mirror `data/SCHEMAS.md` in the vault — that document
+ * is the spec, this file is the implementation of it. Change them together.
+ */
+
+export type Category = 'personal' | 'school' | 'recruiting'
+export const CATEGORIES: readonly Category[] = ['personal', 'school', 'recruiting'] as const
+
+export type Source = 'app' | 'telegram' | 'import'
+
+/** `YYYY-MM-DD`, local. Anything a human thinks of as "a day". */
+export type DateString = string
+/** Epoch milliseconds. */
+export type Timestamp = number
+
+// ---------------------------------------------------------------------------
+// todos
+// ---------------------------------------------------------------------------
+
+export type TodoStatus = 'open' | 'doing' | 'done' | 'dropped'
+/** 0 = drop everything, 1 = high, 2 = normal, 3 = someday. */
+export type Priority = 0 | 1 | 2 | 3
+
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+export type Recurrence =
+  | { type: 'daily'; interval: number }
+  | { type: 'weekly'; interval: number; days: Weekday[] }
+  | { type: 'monthly'; interval: number; day_of_month: number }
+
+export interface Todo {
+  id: string
+  text: string
+  category: Category
+  priority: Priority
+  estimate_minutes: number | null
+  actual_minutes: number | null
+  due: DateString | null
+  status: TodoStatus
+  /** Non-null makes this a template. Templates never appear in a list. */
+  recurrence: Recurrence | null
+  /** Set on spawned instances, pointing at the template. */
+  recurrence_parent: string | null
+  tags: string[]
+  notes: string
+  source: Source
+  created_at: Timestamp
+  updated_at: Timestamp
+  completed_at: Timestamp | null
+}
+
+export type CreateTodoInput = Partial<
+  Omit<Todo, 'id' | 'text' | 'created_at' | 'updated_at' | 'completed_at'>
+> & { text: string }
+
+export type UpdateTodoInput = Partial<
+  Omit<Todo, 'id' | 'created_at' | 'updated_at'>
+>
+
+// ---------------------------------------------------------------------------
+// journal
+// ---------------------------------------------------------------------------
+
+/** 1–7. Widened from the original 1–5 so the imported 6s and 7s survive losslessly. */
+export type Rating = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export const RATING_MIN = 1
+export const RATING_MAX = 7
+
+export interface JournalEntry {
+  id: string
+  entry_date: DateString
+  /** The only required field. A rating alone is a complete entry. */
+  rating: Rating
+  gratitude_text?: string
+  learned?: string
+  mood_word?: string
+  mood_context?: string
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export type UpsertJournalInput = { entry_date: DateString; rating: Rating } & Partial<
+  Pick<JournalEntry, 'gratitude_text' | 'learned' | 'mood_word' | 'mood_context'>
+>
+
+/** What `synthesis.journal_access: "metadata"` projects down to. */
+export type JournalMetadata = Pick<JournalEntry, 'entry_date' | 'rating' | 'mood_word'>
+
+/**
+ * Streaks may be shown counting up but MUST NEVER be shown as broken (PRD J6).
+ * There is deliberately no `broken` field and no way to derive one from this shape.
+ */
+export interface StreakInfo {
+  /** Consecutive days ending today or yesterday. 0 means "not currently running". */
+  current: number
+  /** Banked permanently. Never decreases. */
+  longest: number
+  /** Total days with any entry. */
+  total: number
+}
+
+// ---------------------------------------------------------------------------
+// finance
+// ---------------------------------------------------------------------------
+
+export interface Purchase {
+  id: string
+  date: DateString
+  /** Positive dollars. Income and refunds are negative. */
+  amount: number
+  /** Free string. A category absent from settings logs fine and shows as uncategorised. */
+  category: string
+  description: string
+  source: Source
+  created_at: Timestamp
+}
+
+export interface FinanceFile {
+  purchases: Purchase[]
+}
+
+export interface BudgetCategory {
+  name: string
+  /** Monthly limit in dollars. Null = tracked but uncapped. */
+  limit: number | null
+}
+
+export interface CategorySpend {
+  category: string
+  spent: number
+  limit: number | null
+  /** Null when there is no limit. */
+  fraction: number | null
+}
+
+// ---------------------------------------------------------------------------
+// meals + workouts
+// ---------------------------------------------------------------------------
+
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+
+export interface Meal {
+  id: string
+  date: DateString
+  meal: MealSlot
+  description: string
+  /** Nullable on purpose — requiring numbers is how food logs die. */
+  calories: number | null
+  protein_g: number | null
+  /** True when the numbers were guessed by the sort skill rather than measured. */
+  estimated: boolean
+  source: Source
+  created_at: Timestamp
+}
+
+export type WorkoutType = 'lift' | 'run' | 'climb' | 'sport' | 'other'
+
+export interface Workout {
+  id: string
+  date: DateString
+  type: WorkoutType
+  description: string
+  duration_minutes: number | null
+  source: Source
+  created_at: Timestamp
+}
+
+// ---------------------------------------------------------------------------
+// library (markdown-backed)
+// ---------------------------------------------------------------------------
+
+export type LibraryType = 'article' | 'video' | 'paper' | 'other'
+export type LibraryStatus = 'unread' | 'reading' | 'done'
+
+export interface LibraryItem {
+  /** Vault-relative path, e.g. `Library/2026-08-01-ddia-ch5.md`. Acts as the id. */
+  path: string
+  title: string
+  url: string | null
+  type: LibraryType
+  status: LibraryStatus
+  source: string | null
+  tags: string[]
+  /** Powers "what fits in the 40 minutes you have free". */
+  estimated_minutes: number | null
+  saved: DateString
+  /** Auto-set after `library.auto_archive_days`. Archived items stay in the vault. */
+  archived: boolean
+  /** Body below the frontmatter. */
+  body: string
+}
+
+// ---------------------------------------------------------------------------
+// brain dump (markdown-backed)
+// ---------------------------------------------------------------------------
+
+export interface BrainDumpThread {
+  /** Vault-relative path, e.g. `Brain Dump/Recruiting/systems-design.md`. */
+  path: string
+  topic: string
+  title: string
+  created: DateString
+  updated: DateString
+  tags: string[]
+  body: string
+}
+
+// ---------------------------------------------------------------------------
+// calendar (written by a refresh script, read-only to the app)
+// ---------------------------------------------------------------------------
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  /** ISO 8601 with offset. */
+  start: string
+  end: string
+  all_day: boolean
+  location?: string
+}
+
+// ---------------------------------------------------------------------------
+// settings
+// ---------------------------------------------------------------------------
+
+export interface Settings {
+  finance: {
+    categories: BudgetCategory[]
+    currency: string
+    month_starts_on: number
+  }
+  nutrition: {
+    calorie_target: number | null
+    protein_target_g: number | null
+    show_targets: boolean
+  }
+  todos: {
+    default_priority: Priority
+    default_estimate_minutes: number
+  }
+  library: {
+    auto_archive_days: number
+  }
+  synthesis: {
+    /** Enforced by a repository projection, not by prompt instruction. */
+    journal_access: 'full' | 'metadata'
+  }
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  finance: { categories: [], currency: 'USD', month_starts_on: 1 },
+  nutrition: { calorie_target: null, protein_target_g: null, show_targets: false },
+  todos: { default_priority: 2, default_estimate_minutes: 30 },
+  library: { auto_archive_days: 30 },
+  synthesis: { journal_access: 'full' },
+}
+
+// ---------------------------------------------------------------------------
+// derived views
+// ---------------------------------------------------------------------------
+
+/** Per-category multiplier derived from estimate-vs-actual, once enough data exists. */
+export interface CorrectionFactor {
+  category: Category
+  factor: number
+  sample_size: number
+  /** False until `sample_size` crosses the threshold; UI must not show an unconfident factor. */
+  confident: boolean
+}
+
+/** The "is today realistic?" numbers. */
+export interface DayLoad {
+  date: DateString
+  committed_minutes: number
+  free_minutes: number
+  due_minutes: number
+  /** `due_minutes` scaled by the per-category correction factors, when confident. */
+  corrected_due_minutes: number | null
+  /** Todos that do not fit in the remaining free time, in the order they were dropped. */
+  overflow: Todo[]
+}
+
+export interface SearchHit {
+  kind: 'todo' | 'journal' | 'library' | 'brain-dump' | 'meal' | 'workout' | 'purchase' | 'synthesis'
+  id: string
+  title: string
+  snippet: string
+  date: DateString | null
+  /** Vault-relative path for markdown-backed hits, so Obsidian can be opened at it. */
+  path?: string
+}
