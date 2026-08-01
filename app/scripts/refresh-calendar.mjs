@@ -14,6 +14,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { getAccessToken } from './google-config.mjs'
 
 const VAULT_DIR_NAME = 'Dès vu'
@@ -51,21 +52,39 @@ function resolveVault() {
   throw new Error(`Could not find the "${VAULT_DIR_NAME}" vault. Set DESVU_VAULT or pass --vault.`)
 }
 
+export const pad = (n) => String(n).padStart(2, '0')
+
+/** `2026-08-04T00:00:00-07:00` — the same shape Google returns for timed events. */
+export function localIso(date) {
+  const offset = -date.getTimezoneOffset()
+  const sign = offset >= 0 ? '+' : '-'
+  const abs = Math.abs(offset)
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+  )
+}
+
 /**
- * Google returns `dateTime` for timed events and `date` for all-day ones. The schema wants
- * ISO 8601 with an offset for both, so an all-day event is pinned to local midnight rather
- * than being handed to `new Date()` as a bare date — that parses as UTC and lands an
- * all-day event on the wrong day for anyone west of Greenwich.
+ * Google returns `dateTime` for timed events and a bare `date` for all-day ones.
+ *
+ * An all-day event is pinned to **local midnight with a local offset**, deliberately not
+ * `toISOString()`. Two reasons. A bare `YYYY-MM-DD` handed to `new Date()` parses as UTC
+ * and lands the event on the wrong day west of Greenwich. And converting to UTC would make
+ * `calendar.json` mix two representations — offset form for timed events, `Z` form for
+ * all-day ones — so the obvious `start.slice(0, 10)` would read as the local day for one
+ * and the UTC day for the other. Agents and scripts read this file directly; one shape.
  */
-function toIso(slot, fallbackDate) {
+export function toIso(slot, fallbackDate) {
   if (slot?.dateTime) return slot.dateTime
   const day = slot?.date ?? fallbackDate
   if (!day) return null
   const [y, m, d] = day.split('-').map(Number)
-  return new Date(y, m - 1, d, 0, 0, 0).toISOString()
+  return localIso(new Date(y, m - 1, d, 0, 0, 0))
 }
 
-function toEvent(item) {
+export function toEvent(item) {
   const allDay = Boolean(item.start?.date)
   const start = toIso(item.start)
   const end = toIso(item.end)
@@ -139,7 +158,10 @@ async function main() {
   log(`✓ ${events.length} events over ${days} days (${todayCount} today) → ${target}`)
 }
 
-main().catch((error) => {
-  console.error(`✗ ${error.message}`)
-  process.exit(1)
-})
+// Only run when invoked directly, so tests can import the helpers above.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`✗ ${error.message}`)
+    process.exit(1)
+  })
+}
